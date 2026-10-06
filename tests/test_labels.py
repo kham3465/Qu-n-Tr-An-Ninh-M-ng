@@ -32,6 +32,22 @@ def test_snap_solc_and_stem():
     assert slither_stem(Path("access_control_phishable.slither.json")) == "access_control_phishable"
 
 
+def test_keep_unchecked_category_without_family_field():
+    humans = [{"lines": [10], "category": "unchecked_low_level_calls"}]
+    alert = {"lines": [12], "detector": "unchecked-lowlevel"}
+    assert match_alert(alert, humans, line_window=5, family="C") == "keep"
+
+
+def test_make_alert_id_unique():
+    from slatriage.slither_runner import make_alert_id
+
+    a = make_alert_id("dataset/reentrancy/simple_dao.sol", "reentrancy-eth", 0)
+    b = make_alert_id("dataset/access_control/phishable.sol", "reentrancy-eth", 0)
+    c = make_alert_id("dataset/unchecked_low_level_calls/simple_dao.sol", "reentrancy-eth", 0)
+    assert a != b and a != c
+    assert a.startswith("reentrancy_simple_dao__")
+
+
 def test_normalize_detectors_tx_origin():
     payload = {
         "success": True,

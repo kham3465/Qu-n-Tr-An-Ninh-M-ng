@@ -19,12 +19,19 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--alerts", type=Path, required=True, help="labels hoặc pred jsonl (có family + label/decision)")
     ap.add_argument("--closed", type=Path, default=ROOT / "configs" / "closed_list.yaml")
+    ap.add_argument("--curated-root", type=Path, default=ROOT / "data" / "raw" / "smartbugs-curated")
     ap.add_argument("--out", type=Path, default=ROOT / "reports" / "coverage_matrix.jsonl")
     args = ap.parse_args()
 
     closed = load_closed(args.closed)
     alerts = read_jsonl(args.alerts)
-    rows = build_matrix(alerts, closed)
+    all_sources = None
+    vuln = args.curated_root / "vulnerabilities.json"
+    if vuln.exists():
+        from slatriage.curated import load_curated_index
+
+        all_sources = [e.get("path") for e in load_curated_index(vuln) if e.get("path")]
+    rows = build_matrix(alerts, closed, all_sources=all_sources)
     write_jsonl(args.out, rows)
     summary = matrix_summary(rows)
     write_json(args.out.with_suffix(".summary.json"), summary)

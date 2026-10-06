@@ -61,14 +61,17 @@ def train_with_trl(sft_path: Path, out_dir: Path, base_model: str, models_yaml: 
         max_seq_length=2048,
         packing=False,
     )
-    trainer = SFTTrainer(
+    trainer_kwargs = dict(
         model=model,
-        tokenizer=tokenizer,
         train_dataset=ds,
         peft_config=peft_config,
         formatting_func=formatting,
         args=args_sft,
     )
+    try:
+        trainer = SFTTrainer(processing_class=tokenizer, **trainer_kwargs)
+    except TypeError:
+        trainer = SFTTrainer(tokenizer=tokenizer, **trainer_kwargs)
     trainer.train()
     trainer.save_model(str(out_dir))
     tokenizer.save_pretrained(str(out_dir))
@@ -110,7 +113,7 @@ def main() -> None:
         if n == 0:
             print("No rows to train. Abort.")
             sys.exit(1)
-        print(f"Training LoRA-{args.role} on {args.base} …")
+        print(f"Training LoRA-{args.role} on {args.base} ...")
         train_with_trl(sft_path, out, args.base, args.models_yaml)
         print(f"Saved adapter → {out}")
     else:

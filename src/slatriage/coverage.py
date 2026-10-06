@@ -35,10 +35,12 @@ def build_matrix(
     closed: dict[str, Any],
     *,
     source_key: str = "source",
+    all_sources: Iterable[str] | None = None,
 ) -> list[dict[str, Any]]:
     """
     alerts: cần family, label hoặc decision, source.
     Không có alert cho một hạng → ABSENT (Coverage Officer, cấm KEEP).
+    all_sources: mọi contract đã tuyên bố (kể cả 0 alert RAC) để không mất ô ABSENT.
     """
     cats = [c["id"] for c in closed.get("categories", [])]
     by_src: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -46,8 +48,13 @@ def build_matrix(
         src = str(a.get(source_key) or a.get("source_slither") or "unknown")
         by_src[src].append(a)
 
+    sources = set(by_src)
+    if all_sources:
+        sources.update(str(s) for s in all_sources if s)
+
     rows: list[dict[str, Any]] = []
-    for src, items in sorted(by_src.items()):
+    for src in sorted(sources):
+        items = by_src.get(src, [])
         by_cat: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for a in items:
             fam = a.get("family")
