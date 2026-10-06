@@ -1,0 +1,41 @@
+# Map detector Slither → họ chuyên gia (R / A / C).
+# Detector không nằm trong map → bỏ khỏi thang chính (không train, không tính F1 chính).
+
+families:
+  R:
+    description: Reentrancy / luồng ether không an toàn
+    detectors:
+      - reentrancy-eth
+      - reentrancy-no-eth
+      - reentrancy-benign
+      - reentrancy-events
+      - reentrancy-unlimited-gas
+      - eth-send
+  A:
+    description: Access control / tx.origin
+    detectors:
+      - tx-origin
+      - controlled-array-length
+      - suicidal
+      - arbitrary-send-eth
+      - arbitrary-send
+  C:
+    description: Unchecked call / delegatecall
+    detectors:
+      - unchecked-lowlevel
+      - unchecked-send
+      - unchecked-transfer
+      - controlled-delegatecall
+      - delegatecall-loop
+
+# Detector có tín hiệu nhưng chưa đủ mẫu lập họ riêng → O (thang phụ).
+# P1 chỉ chuyển sang họ mới khi đủ min_keep/min_drop trong closed_list.yaml.
+other_detectors:
+  - timestamp
+  - tautology
+  - unused-return
+
+match:
+  # keep nếu cùng họ/loại và |line_alert - line_label| <= window
+  line_window: 5
+  unknown_if_ambiguous: true

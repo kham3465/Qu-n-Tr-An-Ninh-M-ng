@@ -1,0 +1,2 @@
+{"alert_id": "reentrancy-eth_0", "detector": "reentrancy-eth", "family": "R", "lines": [42, 43], "source": "example.sol", "label": "keep", "snippet": "// ..."}
+{"alert_id": "tx-origin_0", "detector": "tx-origin", "family": "A", "lines": [10], "source": "example.sol", "label": "drop", "snippet": "// ..."}
