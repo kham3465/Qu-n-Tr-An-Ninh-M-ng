@@ -1,0 +1,38 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Models & adapters (quá nặng)
+adapters/**
+!adapters/.gitkeep
+*.bin
+*.safetensors
+*.gguf
+
+# Data thô / JSON Slither lớn
+data/raw/**
+!data/raw/.gitkeep
+!data/raw/README.md
+data/labels/*.jsonl
+!data/labels/.gitkeep
+!data/labels/schema.example.jsonl
+!data/labels/demo_labels.jsonl
+
+# Reports tạm
+reports/**
+!reports/.gitkeep
+
+# Env / IDE
+.env
+.idea/
+.vscode/
+*.swp
+
+# OS
+Thumbs.db
+Desktop.ini

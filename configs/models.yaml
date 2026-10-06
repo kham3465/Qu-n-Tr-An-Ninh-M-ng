@@ -1,0 +1,27 @@
+# Model IDs — chốt nhóm 2026-10
+council_base:
+  id: Qwen/Qwen2.5-Coder-7B-Instruct
+  role: train_lora_R_A_C_J
+  quantization: 4bit  # QLoRA
+
+baseline_g:
+  id: deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
+  role: single_prompt_triage
+  train: false
+  quantization: 4bit  # chỉnh theo VRAM
+
+inference:
+  temperature: 0.0
+  max_new_tokens: 512
+
+# Người P2 (GPU) ghi đè sau khi đo máy
+hardware_notes:
+  min_vram_gb_qlora_7b: 10
+  min_vram_gb_infer_14b_4bit: 12
+  seed: 0
+
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules: [q_proj, v_proj]

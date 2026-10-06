@@ -1,0 +1,20 @@
+# Core pipeline
+pyyaml>=6.0
+jsonlines>=4.0
+tqdm>=4.66
+pandas>=2.0
+
+# Slither thường cài riêng: pip install slither-analyzer
+# solc-select: pip install solc-select
+
+# Train / infer (P2 cài khi có GPU)
+torch>=2.1
+transformers>=4.44
+accelerate>=0.33
+peft>=0.12
+bitsandbytes>=0.43
+datasets>=2.20
+trl>=0.9
+
+# Eval
+scikit-learn>=1.3

@@ -1,0 +1,48 @@
+# Danh sách đóng L — mọi hạng phải có một ô trên mỗi contract.
+# Coverage Officer chỉ được ABSENT | UNKNOWN khi không có alert; cấm KEEP.
+
+categories:
+  - id: reentrancy
+    dasp: Reentrancy
+    family_default: R
+    swc: [SWC-107]
+  - id: access_control
+    dasp: Access Control
+    family_default: A
+    swc: [SWC-115, SWC-105]
+  - id: unchecked_low_calls
+    dasp: Unchecked Low Level Calls
+    family_default: C
+    swc: [SWC-104]
+  - id: arithmetic
+    dasp: Arithmetic
+    family_default: null
+    swc: [SWC-101]
+  - id: bad_randomness
+    dasp: Bad Randomness
+    family_default: null
+    swc: []
+  - id: denial_of_service
+    dasp: Denial of Service
+    family_default: null
+    swc: []
+  - id: front_running
+    dasp: Front Running
+    family_default: null
+    swc: []
+  - id: time_manipulation
+    dasp: Time Manipulation
+    family_default: null
+    swc: [SWC-116]
+  - id: short_addresses
+    dasp: Short Addresses
+    family_default: null
+    swc: []
+  - id: other
+    dasp: Other
+    family_default: O
+    swc: []
+
+# Ngưỡng lập họ mới (P1 đếm xong mới tăng k)
+min_keep_to_open_family: 25
+min_drop_to_open_family: 25

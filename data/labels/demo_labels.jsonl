@@ -1,0 +1,4 @@
+{"alert_id": "reentrancy-eth_0", "detector": "reentrancy-eth", "family": "R", "lines": [42, 43], "source": "demo/Reentrancy.sol", "description": "Reentrancy in withdraw", "snippet": "msg.sender.call{value: bal}(\"\");\nbal = 0;", "label": "keep"}
+{"alert_id": "tx-origin_0", "detector": "tx-origin", "family": "A", "lines": [10], "source": "demo/Auth.sol", "description": "tx.origin used for auth", "snippet": "require(tx.origin == owner);", "label": "keep"}
+{"alert_id": "unchecked-lowlevel_0", "detector": "unchecked-lowlevel", "family": "C", "lines": [7], "source": "demo/Call.sol", "description": "unchecked call return", "snippet": "addr.call(data);", "label": "drop"}
+{"alert_id": "reentrancy-benign_0", "detector": "reentrancy-benign", "family": "R", "lines": [20], "source": "demo/Benign.sol", "description": "benign reentrancy pattern", "snippet": "// state updated first", "label": "drop"}
