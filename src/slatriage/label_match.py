@@ -20,12 +20,14 @@ def match_alert(
     if not alert_lines:
         return "unknown"
 
+    from .curated import DASP_TO_FAMILY
+
     candidates = []
     for h in human_findings:
         h_fam = h.get("family")
         if not h_fam:
             raw = str(h.get("type") or h.get("category") or "")
-            h_fam = raw if raw in ("R", "A", "C") else raw[:1].upper() if raw else None
+            h_fam = raw if raw in ("R", "A", "C") else DASP_TO_FAMILY.get(raw)
         if family and h_fam and str(h_fam).upper() != str(family).upper():
             continue
         h_lines = set(h.get("lines") or [])

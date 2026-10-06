@@ -231,6 +231,14 @@ def normalize_detectors(slither_payload: dict[str, Any]) -> list[dict[str, Any]]
     return alerts
 
 
+def make_alert_id(source: str, detector: str, index: int) -> str:
+    """Globally unique id: parent_stem + detector + per-file index."""
+    p = Path(str(source))
+    stem = f"{p.parent.name}_{p.stem}".replace(" ", "_") or "unknown"
+    det = detector or "unknown"
+    return f"{stem}__{det}_{index}"
+
+
 def slither_stem(path: Path) -> str:
     name = path.name
     suffix = ".slither.json"

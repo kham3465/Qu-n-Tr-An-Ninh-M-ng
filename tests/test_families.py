@@ -36,3 +36,11 @@ def test_matrix_on_demo():
     assert any(r["cell"] in ("KEEP", "DROP") for r in reent)
     arith = [r for r in rows if r["category"] == "arithmetic"]
     assert arith and all(r["cell"] == "ABSENT" for r in arith)
+
+
+def test_matrix_includes_empty_contract():
+    closed = load_closed(ROOT / "configs" / "closed_list.yaml")
+    rows = build_matrix([], closed, all_sources=["dataset/other/empty.sol"])
+    assert rows
+    assert all(r["source"] == "dataset/other/empty.sol" for r in rows)
+    assert all(r["cell"] == "ABSENT" for r in rows)

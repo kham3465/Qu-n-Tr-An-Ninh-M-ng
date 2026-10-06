@@ -28,6 +28,7 @@ from slatriage.families import assign_family
 from slatriage.io_utils import write_json, write_jsonl
 from slatriage.label_match import match_alert
 from slatriage.slither_runner import (
+    make_alert_id,
     normalize_detectors,
     run_slither_json,
     snippet_around,
@@ -129,7 +130,7 @@ def main() -> None:
         humans = human_findings_for_entry(entry) if entry else []
         src = (entry or {}).get("path") or str(payload.get("sol_path") or "")
         sol_file = Path(payload["sol_path"]) if payload.get("sol_path") else None
-        for alert in alerts:
+        for i, alert in enumerate(alerts):
             det = alert.get("detector") or ""
             detector_counts[det] += 1
             fam = assign_family(det, mapping, allow_other=False)
@@ -142,6 +143,7 @@ def main() -> None:
             rows.append(
                 {
                     **alert,
+                    "alert_id": make_alert_id(src, det, i),
                     "family": fam,
                     "label": label,
                     "source": src,
@@ -156,11 +158,16 @@ def main() -> None:
     counts: Counter = Counter()
     for r in rows:
         counts[(r["family"], r["label"])] += 1
+    if not summary:
+        sum_path = slither_dir / "summary.json"
+        if sum_path.exists():
+            summary = json.loads(sum_path.read_text(encoding="utf-8"))
     n_ok = sum(1 for s in summary if s.get("ok")) if summary else "?"
+    n_all = len(summary) if summary else (len(sols) if sols else "?")
     lines = [
         "# Curated label stats",
         "",
-        f"- slither ok: {n_ok}/{len(sols) if sols else '?'}",
+        f"- slither ok: {n_ok}/{n_all}",
         f"- in-scope RAC alerts: {len(rows)}",
         "",
         "| family | keep | drop | unknown |",

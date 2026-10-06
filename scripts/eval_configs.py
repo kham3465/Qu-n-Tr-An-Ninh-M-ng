@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P3: evaluate configs from prediction JSONL + gold labels."""
+"""Evaluate configs from prediction JSONL + gold labels."""
 
 from __future__ import annotations
 
@@ -15,6 +15,17 @@ from slatriage.io_utils import read_jsonl, write_json
 from slatriage.metrics import binary_prf, relative_gain
 
 
+def row_key(row: dict) -> tuple[str, str]:
+    return (str(row.get("source") or ""), str(row.get("alert_id") or ""))
+
+
+def config_name(pred_path: Path) -> str:
+    name = pred_path.stem
+    if name.startswith("pred_"):
+        name = name[5:]
+    return name
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--gold", type=Path, required=True)
@@ -22,21 +33,24 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=ROOT / "reports" / "summary.json")
     args = ap.parse_args()
 
-    gold_rows = {r.get("alert_id"): r for r in read_jsonl(args.gold)}
+    gold_list = read_jsonl(args.gold)
+    gold_by_pair = {row_key(r): r for r in gold_list}
+    gold_by_id: dict[str, list] = {}
+    for r in gold_list:
+        gold_by_id.setdefault(str(r.get("alert_id") or ""), []).append(r)
+
     summary: dict = {}
     invent_notes: dict = {}
 
     for pred_path in args.pred:
-        name = pred_path.stem.replace("pred_", "").replace(".jsonl", "")
-        if name.endswith(".jsonl"):
-            name = pred_path.stem
-        # normalize names like pred_E → E
-        if name.startswith("pred_"):
-            name = name[5:]
+        name = config_name(pred_path)
         preds = read_jsonl(pred_path)
         y_true, y_pred = [], []
         for p in preds:
-            g = gold_rows.get(p.get("alert_id"))
+            g = gold_by_pair.get(row_key(p))
+            if g is None:
+                hits = gold_by_id.get(str(p.get("alert_id") or ""), [])
+                g = hits[0] if len(hits) == 1 else None
             if not g or g.get("label") == "unknown":
                 continue
             y_true.append(g["label"])
@@ -44,15 +58,11 @@ def main() -> None:
         summary[name] = binary_prf(y_true, y_pred) if y_true else {"error": "no overlap", "n": 0}
         summary[name]["n_scored"] = len(y_true)
 
-        report_side = pred_path.with_suffix(".report.json")
-        if not str(report_side).endswith(".report.json"):
-            report_side = Path(str(pred_path) + ".report.json")
-            alt = pred_path.parent / (pred_path.stem + ".report.json")
-            report_side = alt if alt.exists() else report_side
-        if report_side.exists():
-            rep = json.loads(report_side.read_text(encoding="utf-8"))
+        alt = pred_path.parent / (pred_path.stem + ".report.json")
+        if alt.exists():
+            rep = json.loads(alt.read_text(encoding="utf-8"))
             j = rep.get("judge") or {}
-            invent_notes[name] = j.get("invented_count")
+            invent_notes[name] = j.get("invented_count", rep.get("invented_count"))
 
     if "E" in summary and "B" in summary:
         if "precision" in summary["E"] and "precision" in summary["B"]:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +45,8 @@ def main() -> None:
         experts = None
         judge = base
     else:
+        # One HF process loads several 7B copies if all adapters are set — needs >16GB.
+        # On T4: train one role per session; infer E on a bigger GPU or sequentially later.
         base = get_backend("hf", model_id=args.model, adapter_path=None)
         g_llm = get_backend("hf", model_id=args.g_model, adapter_path=None) if args.config == "G" else base
         experts = {
@@ -57,22 +60,46 @@ def main() -> None:
             adapter_path=str(args.adapter_j) if args.adapter_j else None,
         )
 
-    report = run_config(
-        args.config,  # type: ignore[arg-type]
-        alerts,
-        map_path=args.map,
-        base_llm=base,
-        expert_llms=experts,
-        judge_llm=judge,
-        g_llm=g_llm,
-        sol_path=args.sol_path,
-    )
+    by_src: dict[str, list[Alert]] = defaultdict(list)
+    for a in alerts:
+        by_src[a.source or args.sol_path or "_"].append(a)
+
+    preds = []
+    invent_total = 0
+    per_source = []
+    for src, group in by_src.items():
+        report = run_config(
+            args.config,  # type: ignore[arg-type]
+            group,
+            map_path=args.map,
+            base_llm=base,
+            expert_llms=experts,
+            judge_llm=judge,
+            g_llm=g_llm,
+            sol_path=src,
+        )
+        for p in report.predictions:
+            p.setdefault("source", src)
+            preds.append(p)
+        if report.judge:
+            invent_total += int(report.judge.invented_count or 0)
+        per_source.append(report.to_dict())
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    write_json(args.out.with_suffix(".report.json"), report.to_dict())
-    n = write_jsonl(args.out, report.predictions)
-    invent = report.judge.invented_count if report.judge else None
-    print(f"config={args.config} predictions={n} invented={invent} → {args.out}")
+    write_json(
+        args.out.with_suffix(".report.json")
+        if args.out.suffix == ".jsonl"
+        else Path(str(args.out) + ".report.json"),
+        {
+            "config": args.config,
+            "invented_count": invent_total,
+            "judge": {"invented_count": invent_total},
+            "n_sources": len(by_src),
+            "per_source": per_source,
+        },
+    )
+    n = write_jsonl(args.out, preds)
+    print(f"config={args.config} predictions={n} invented={invent_total} sources={len(by_src)} -> {args.out}")
 
 
 if __name__ == "__main__":
