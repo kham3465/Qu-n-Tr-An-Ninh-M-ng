@@ -32,6 +32,21 @@ def test_snap_solc_and_stem():
     assert slither_stem(Path("access_control_phishable.slither.json")) == "access_control_phishable"
 
 
+def test_multi_hit_keep_for_solidifi():
+    humans = [
+        {"family": "A", "lines": [20]},
+        {"family": "A", "lines": [22]},
+    ]
+    alert = {"lines": [21], "detector": "tx-origin"}
+    assert match_alert(alert, humans, line_window=5, family="A") == "unknown"
+    assert match_alert(alert, humans, line_window=5, family="A", multi_hit="keep") == "keep"
+
+
+def test_keep_solidifi_style_range():
+    humans = [{"family": "A", "category": "access_control", "lines": [22, 23, 24, 25]}]
+    assert match_alert({"lines": [24], "detector": "tx-origin"}, humans, family="A") == "keep"
+
+
 def test_keep_unchecked_category_without_family_field():
     humans = [{"lines": [10], "category": "unchecked_low_level_calls"}]
     alert = {"lines": [12], "detector": "unchecked-lowlevel"}

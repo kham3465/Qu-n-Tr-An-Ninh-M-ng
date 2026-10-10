@@ -10,6 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from slatriage.council import run_config
 from slatriage.io_utils import read_jsonl, write_json, write_jsonl
@@ -25,7 +27,7 @@ def load_alerts(path: Path) -> list[Alert]:
 def main() -> None:
     ap = argparse.ArgumentParser(description="SlaTriage council runner")
     ap.add_argument("--alerts", type=Path, required=True, help="JSONL alerts or labels")
-    ap.add_argument("--config", choices=list("ABCDEG"), required=True)
+    ap.add_argument("--config", choices=["A", "B", "C", "D", "E", "G"], required=True)
     ap.add_argument("--map", type=Path, default=ROOT / "configs" / "detectors_map.yaml")
     ap.add_argument("--backend", choices=["mock", "hf"], default="mock")
     ap.add_argument("--model", default="Qwen/Qwen2.5-Coder-7B-Instruct")
@@ -99,7 +101,7 @@ def main() -> None:
         },
     )
     n = write_jsonl(args.out, preds)
-    print(f"config={args.config} predictions={n} invented={invent_total} sources={len(by_src)} -> {args.out}")
+    print(f"config={args.config} predictions={n} invented={invent_total} sources={len(by_src)} out={args.out.name}")
 
 
 if __name__ == "__main__":

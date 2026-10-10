@@ -11,6 +11,7 @@ def match_alert(
     *,
     line_window: int = 5,
     family: str | None = None,
+    multi_hit: str = "unknown",
 ) -> str:
     """
     human_finding keys expected: type/family, lines (list[int]) or line (int).
@@ -43,5 +44,8 @@ def match_alert(
     if len(candidates) == 1:
         return "keep"
     if len(candidates) > 1:
+        # SolidiFI: one folder = one bug type, overlapping injections still keep.
+        if multi_hit == "keep":
+            return "keep"
         return "unknown"
     return "drop"

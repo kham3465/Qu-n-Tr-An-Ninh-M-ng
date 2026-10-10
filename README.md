@@ -100,8 +100,9 @@ Quy trình đã làm xong tới hết nhãn:
 4. Khớp dòng / họ → `data/labels/labels_v1.jsonl`.
 5. Xuất mẫu học R, A, C, J (loại unknown).
 6. Dựng ma trận coverage từ nhãn.
+7. Thêm SolidiFI (bug bơm, chỉ họ R/A/C) làm **tập học phụ** → `labels_solidifi.jsonl` + `data/sft/combined`. F1 chính vẫn Curated.
 
-Chưa làm: học bốn adapter, chạy A–E–G, đo, viết kết luận.
+Chưa làm: học bốn adapter trên `data/sft/combined`, chạy A–E–G, đo trên `labels_v1`, viết kết luận.
 
 ---
 
@@ -117,6 +118,8 @@ Chưa làm: học bốn adapter, chạy A–E–G, đo, viết kết luận.
 
 Họ A keep mỏng vì nhiều lỗ access-control Curated (sai tên constructor, ghi mapping) **không** trùng detector Slither A — đúng ô ABSENT, không phải “sót keep”. Ghi rõ khi viết báo. Không dùng dataset HuggingFace gắn nhãn theo chính Slither (học vẹt tool đang được triage).
 
+Tập học phụ SolidiFI (200 file RAC, bug bơm, **không** vào F1 chính): 6955 alert. Keep/drop R 1385/303, A 1933/2403, C 923/8. SFT train gộp (`data/sft/combined`): R=1847, A=4403, C=1005, J=633. C drop rất mỏng — LoRA-C sẽ lệch keep.
+
 ---
 
 ## 5. Bước tiếp theo
@@ -124,17 +127,24 @@ Họ A keep mỏng vì nhiều lỗ access-control Curated (sai tên constructor
 Làm theo thứ tự; bước sau cần output bước trước.
 
 **Bước 1 — Học bốn adapter (đang chờ)**  
-Học R, rồi A, rồi C, rồi J trên `labels_v1` (bỏ unknown). Cùng một model nền, mỗi vai một LoRA. Xong bước này mới có hệ E.
+Học R, rồi A, rồi C, rồi J trên `data/sft/combined` (Curated + SolidiFI phụ). F1 / eval sau train chỉ trên `labels_v1`. Cùng một model nền, mỗi vai một LoRA. Xong bước này mới có hệ E.
+
+Kaggle: GPU T4 + Internet, clone git (không zip):
+
+`git clone https://github.com/kham3465/Qu-n-Tr-An-Ninh-M-ng.git`  
+rồi `notebooks/kaggle_train.ipynb` hoặc `python scripts/kaggle_train.py`. `--resume` mặc định.
 
 **Bước 2 — Chạy đủ sáu cấu hình trên cùng tập alert**  
 A (không model), B, C, D, E, G. Mỗi cấu hình một file dự đoán: `alert_id`, `source`, `decision`. Judge ghi `invented_count`.
 
-**Bước 3 — Đo**  
-- P / R / F1 trên nhãn `keep` (bỏ unknown).  
-- Gain tương đối \((P_E - P_B) / P_B\) — mốc kiểm 15%, đạt hay không đều ghi.  
-- % invent ở C, D, E (kỳ vọng E thấp hơn C).  
-- Ablation: tắt LoRA-R thì F1 họ R phải giảm; nếu không giảm thì giả thuyết “một họ = một câu hỏi” không đứng.  
-- Bảng coverage: ABSENT / FN theo hạng DASP, không gộp vào F1 chính.
+**Bước 3 — Đo + biểu đồ**  
+Một lệnh sau khi có adapter (và pred nếu đã chạy hội đồng):
+
+`python scripts/train_lora.py --all --do-train` (mặc định `--resume`: bỏ vai đã xong, nối checkpoint).  
+`python scripts/after_train.py` — skip `pred_*.jsonl` đã có; `--force` để chạy lại.  
+Có GPU và muốn tự chạy B–G + ablation: thêm `--run-hf`.
+
+Ra `reports/BAO-CAO-CHI-SO.md`, `paper_stats.json`, `reports/figures/fig01…fig12.png`: nhãn, SFT, coverage, P/R/F1, F1 theo họ, invent, gain E vs B, ablation tắt LoRA-R, loss train, TP/FP/FN. F1 chính chỉ trên `labels_v1`.
 
 **Bước 4 — Chỉ khi 1–3 xong**  
 Thêm tập ngoài Curated (110 ca SmartAudit, Web3Bugs biên dịch được) nếu đủ mẫu; dưới 20 file thì ghi “chưa đủ”, không ép RQ. Viết báo đúng khung *triage cảnh báo*, không viết thành “hệ audit đa tác nhân như SmartAudit”.

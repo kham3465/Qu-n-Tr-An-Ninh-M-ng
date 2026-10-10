@@ -1,0 +1,9 @@
+{
+  "slither_ok_pct": 100.0,
+  "A_keep": 1933,
+  "split_solidifi": true,
+  "cross_family_keep": 0,
+  "pass_slither": true,
+  "pass_A_keep": true,
+  "pass_family": true
+}
