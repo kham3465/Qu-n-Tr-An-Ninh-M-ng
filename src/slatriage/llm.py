@@ -61,7 +61,10 @@ class MockLLM(LLMBackend):
         # Batch / judge
         if "Expert decisions" in user:
             try:
-                experts = extract_json_object(user[user.find("[") :])
+                chunk = user.split("Original alerts:", 1)[0]
+                experts = extract_json_object(chunk[chunk.find("[") :])
+                if not isinstance(experts, list):
+                    experts = [experts] if isinstance(experts, dict) else []
                 findings = [
                     {
                         "alert_id": e.get("alert_id"),
@@ -74,7 +77,8 @@ class MockLLM(LLMBackend):
                 ]
                 return json.dumps({"findings": findings, "invented_count": 0})
             except Exception:
-                return json.dumps({"findings": [], "invented_count": 0})
+                # Non-JSON so JudgeAgent falls back to expert keeps (do not emit empty findings).
+                return "PARSE_FAIL"
         if "Alerts:" in user:
             # crude: emit drop for all alert_ids found
             ids = re.findall(r'"alert_id"\s*:\s*"([^"]+)"', user)
@@ -112,7 +116,11 @@ class HuggingFaceLLM(LLMBackend):
         if self.load_in_4bit:
             kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
             kwargs["torch_dtype"] = torch.float16
-        self._model = AutoModelForCausalLM.from_pretrained(self.model_id, **kwargs)
+        try:
+            self._model = AutoModelForCausalLM.from_pretrained(self.model_id, **kwargs)
+        except TypeError:
+            kwargs.pop("torch_dtype", None)
+            self._model = AutoModelForCausalLM.from_pretrained(self.model_id, **kwargs)
         if self.adapter_path:
             from peft import PeftModel
 
@@ -126,7 +134,11 @@ class HuggingFaceLLM(LLMBackend):
             {"role": "user", "content": user},
         ]
         prompt = self._tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = self._tokenizer(prompt, return_tensors="pt").to(self._model.device)
+        try:
+            device = next(self._model.parameters()).device
+        except StopIteration:
+            device = "cpu"
+        inputs = self._tokenizer(prompt, return_tensors="pt").to(device)
         do_sample = temperature is not None and temperature > 0
         out = self._model.generate(
             **inputs,

@@ -180,12 +180,15 @@ def main() -> None:
     stats_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
 
+    sft_dir = ROOT / "data" / "sft"
     for role in ("R", "A", "C"):
-        n = export_sft_jsonl(labels_path, ROOT / "adapters" / role / f"sft_{role}.jsonl", family=role)
+        n = export_sft_jsonl(labels_path, sft_dir / f"sft_{role}.jsonl", family=role)
+        export_sft_jsonl(labels_path, ROOT / "adapters" / role / f"sft_{role}.jsonl", family=role)
         print(f"SFT {role}: {n} rows")
-    n_j = export_judge_sft(labels_path, ROOT / "adapters" / "J" / "sft_J.jsonl")
+    n_j = export_judge_sft(labels_path, sft_dir / "sft_J.jsonl")
+    export_judge_sft(labels_path, ROOT / "adapters" / "J" / "sft_J.jsonl")
     print(f"SFT J: {n_j} rows")
-    print("READY_TO_TRAIN: run train_lora.py --do-train on GPU")
+    print("READY_TO_TRAIN: python scripts/train_lora.py --all --do-train")
 
 
 if __name__ == "__main__":
