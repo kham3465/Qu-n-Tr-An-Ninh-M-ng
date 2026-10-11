@@ -10,24 +10,68 @@ def test_train_pins_single_gpu():
 
 
 def test_cast_skips_when_no_bf16():
-    from slatriage.train_qlora import _cast_non_quant_to_fp16
-
-    class W:
-        dtype = None
-        is_quantized = False
-        quant_state = None
+    from slatriage.train_qlora import _strip_bfloat16
 
     class M:
-        weight = W()
         config = type("C", (), {})()
 
-        def modules(self):
-            return [self]
+        def named_parameters(self):
+            return []
 
-        def to(self, _dt):
-            raise AssertionError("should not cast")
+        def named_buffers(self):
+            return []
 
-    _cast_non_quant_to_fp16(M())
+    _strip_bfloat16(M())
+
+
+def test_strip_bf16_to_fp32():
+    import torch
+    from torch import nn
+
+    from slatriage.train_qlora import _strip_bfloat16
+
+    m = nn.Linear(2, 2)
+    m.to(torch.bfloat16)
+    _strip_bfloat16(m)
+    assert m.weight.dtype == torch.float32
+    assert m.bias.dtype == torch.float32
+
+
+def test_disable_amp_clears_flags():
+    from slatriage.train_qlora import _disable_amp
+
+    class Args:
+        fp16 = True
+        bf16 = True
+        bf16_full_eval = True
+
+    class Acc:
+        native_amp = True
+        scaler = object()
+        state = type("S", (), {"mixed_precision": "bf16"})()
+
+    class Trainer:
+        args = Args()
+        accelerator = Acc()
+        scaler = object()
+
+    t = Trainer()
+    _disable_amp(t)
+    assert t.args.fp16 is False
+    assert t.args.bf16 is False
+    assert t.accelerator.native_amp is False
+    assert t.accelerator.scaler is None
+    assert t.scaler is None
+
+
+def test_pin_overwrites_mixed_precision(monkeypatch):
+    import os
+
+    monkeypatch.setenv("ACCELERATE_MIXED_PRECISION", "bf16")
+    from slatriage.train_qlora import pin_single_gpu
+
+    pin_single_gpu()
+    assert os.environ["ACCELERATE_MIXED_PRECISION"] == "no"
 
 
 def test_adapter_complete_and_latest_ckpt(tmp_path):

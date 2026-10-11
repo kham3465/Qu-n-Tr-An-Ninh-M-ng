@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+os.environ["ACCELERATE_MIXED_PRECISION"] = "no"
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -120,6 +121,7 @@ def main() -> None:
         return
 
     require_cuda()
+    print("QLORA_GUARD amp=off leftover=fp32")
     token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
     if token:
         os.environ.setdefault("HF_TOKEN", token)

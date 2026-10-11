@@ -67,6 +67,13 @@ def _build_bnb():
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_quant_storage=torch.float16,
+            ),
+            dict(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_compute_dtype=torch.float16,
             ),
             dict(load_in_4bit=True),
         ],
@@ -171,7 +178,6 @@ def _make_trainer(model, tokenizer, dataset, peft_config, args, eval_dataset=Non
             model=model,
             args=args,
             train_dataset=dataset,
-            peft_config=peft_config,
             processing_class=tokenizer,
             dataset_text_field="text",
         ),
@@ -179,14 +185,12 @@ def _make_trainer(model, tokenizer, dataset, peft_config, args, eval_dataset=Non
             model=model,
             args=args,
             train_dataset=dataset,
-            peft_config=peft_config,
             processing_class=tokenizer,
         ),
         dict(
             model=model,
             args=args,
             train_dataset=dataset,
-            peft_config=peft_config,
             tokenizer=tokenizer,
             dataset_text_field="text",
         ),
@@ -194,10 +198,11 @@ def _make_trainer(model, tokenizer, dataset, peft_config, args, eval_dataset=Non
             model=model,
             args=args,
             train_dataset=dataset,
-            peft_config=peft_config,
             tokenizer=tokenizer,
         ),
     ]
+    if peft_config is not None:
+        bases = [{**b, "peft_config": peft_config} for b in bases] + bases
     attempts = []
     if eval_dataset is not None:
         for b in bases:
@@ -207,11 +212,11 @@ def _make_trainer(model, tokenizer, dataset, peft_config, args, eval_dataset=Non
 
 
 def pin_single_gpu() -> None:
-    """QLoRA SFT cannot split 7B across two T4s (cuda:0 vs cuda:1)."""
+    """One visible GPU; never let Accelerate turn on fp16/bf16 AMP."""
     import os
 
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
-    os.environ.setdefault("ACCELERATE_MIXED_PRECISION", "no")
+    os.environ["ACCELERATE_MIXED_PRECISION"] = "no"
 
 
 def _train_device_map():
@@ -235,21 +240,66 @@ def _load_causal(base_model: str, bnb: Any):
     raise TypeError(last)
 
 
-def _cast_non_quant_to_fp16(model):
-    """T4 has no BF16 AMP. Heads/norms left in bf16 crash GradScaler."""
+def _is_quant_weight(weight) -> bool:
+    return bool(getattr(weight, "is_quantized", False) or getattr(weight, "quant_state", None) is not None)
+
+
+def _strip_bfloat16(model):
+    """Qwen checkpoints keep lm_head/norms in bf16. T4 GradScaler cannot unscale that."""
     import torch
 
-    for module in model.modules():
-        if getattr(module, "weight", None) is None:
+    for _name, param in model.named_parameters():
+        if _is_quant_weight(param):
             continue
-        w = module.weight
-        if getattr(w, "is_quantized", False) or getattr(w, "quant_state", None) is not None:
-            continue
-        if getattr(w, "dtype", None) == torch.bfloat16:
-            module.to(torch.float16)
+        if param.dtype == torch.bfloat16:
+            param.data = param.data.to(dtype=torch.float32)
+    for _name, buf in model.named_buffers():
+        if getattr(buf, "dtype", None) == torch.bfloat16:
+            buf.data = buf.data.to(dtype=torch.float32)
     if getattr(model, "config", None) is not None:
-        model.config.torch_dtype = torch.float16
+        model.config.torch_dtype = torch.float32
     return model
+
+
+def _cast_non_quant_to_fp16(model):
+    """Back-compat name: leftover bf16 goes to fp32 (AMP stays off)."""
+    return _strip_bfloat16(model)
+
+
+def _force_fp32_trainable(model) -> int:
+    import torch
+
+    n = 0
+    for param in model.parameters():
+        if param.requires_grad and param.dtype != torch.float32:
+            param.data = param.data.to(dtype=torch.float32)
+            n += 1
+    return n
+
+
+def _disable_amp(trainer) -> None:
+    args = getattr(trainer, "args", None)
+    if args is not None:
+        args.fp16 = False
+        args.bf16 = False
+        for key in ("bf16_full_eval", "fp16_full_eval"):
+            if hasattr(args, key):
+                setattr(args, key, False)
+    acc = getattr(trainer, "accelerator", None)
+    if acc is not None:
+        acc.native_amp = False
+        if hasattr(acc, "amp"):
+            acc.amp = False
+        state = getattr(acc, "state", None)
+        if state is not None and hasattr(state, "mixed_precision"):
+            try:
+                state.mixed_precision = "no"
+            except Exception:
+                pass
+        if hasattr(acc, "scaler"):
+            acc.scaler = None
+    if hasattr(trainer, "scaler"):
+        trainer.scaler = None
 
 
 def train_one_role(
@@ -298,7 +348,9 @@ def train_one_role(
     if ckpt:
         print(f"RESUME checkpoint {ckpt.name}")
 
-    model = _cast_non_quant_to_fp16(_load_causal(base_model, _build_bnb()))
+    pin_single_gpu()
+    print("QLORA_GUARD amp=off leftover=fp32 (T4 has no BF16 GradScaler)")
+    model = _strip_bfloat16(_load_causal(base_model, _build_bnb()))
     model.config.use_cache = False
     if hasattr(model, "enable_input_require_grads"):
         model.enable_input_require_grads()
@@ -306,7 +358,7 @@ def train_one_role(
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
     except TypeError:
         model = prepare_model_for_kbit_training(model)
-    model = _cast_non_quant_to_fp16(model)
+    model = _strip_bfloat16(model)
 
     peft_config = LoraConfig(
         r=int(lora_cfg.get("r", 16)),
@@ -316,15 +368,22 @@ def train_one_role(
         bias="none",
         task_type="CAUSAL_LM",
     )
+    peft_for_trainer: Any = peft_config
+    try:
+        from peft import PeftModel, get_peft_model
+
+        if not isinstance(model, PeftModel):
+            model = get_peft_model(model, peft_config)
+        peft_for_trainer = None
+    except Exception as e:
+        print(f"WARN get_peft_model deferred to trainer: {type(e).__name__}: {e}")
+    model = _strip_bfloat16(model)
+    n_cast = _force_fp32_trainable(model)
+    print(f"trainable_cast_fp32={n_cast}")
 
     trainer = None
     last_err: Exception | None = None
-    attempts = (
-        ("paged_adamw_8bit", False),
-        ("adamw_torch", False),
-        ("adamw_torch", True),
-    )
-    for optim, use_fp16 in attempts:
+    for optim in ("paged_adamw_8bit", "adamw_torch"):
         try:
             args = _make_train_args(
                 out_dir,
@@ -335,10 +394,14 @@ def train_one_role(
                 optim,
                 save_steps=save_steps,
                 has_eval=eval_dataset is not None,
-                fp16=use_fp16,
+                fp16=False,
                 bf16=False,
             )
-            trainer = _make_trainer(model, tokenizer, dataset, peft_config, args, eval_dataset=eval_dataset)
+            trainer = _make_trainer(model, tokenizer, dataset, peft_for_trainer, args, eval_dataset=eval_dataset)
+            _disable_amp(trainer)
+            if getattr(trainer, "model", None) is not None:
+                _strip_bfloat16(trainer.model)
+                _force_fp32_trainable(trainer.model)
             if ckpt:
                 trainer.train(resume_from_checkpoint=str(ckpt))
             else:
@@ -347,7 +410,7 @@ def train_one_role(
             break
         except Exception as e:
             last_err = e
-            print(f"WARN train retry optim={optim} fp16={use_fp16}: {type(e).__name__}: {e}")
+            print(f"WARN train retry optim={optim} amp=off: {type(e).__name__}: {e}")
             trainer = None
             continue
     if last_err is not None or trainer is None:

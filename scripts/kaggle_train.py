@@ -25,11 +25,21 @@ def _root() -> Path:
     return repo
 
 
+def _print_git(root: Path) -> None:
+    git = root / ".git"
+    if not git.exists():
+        print("git=missing", flush=True)
+        return
+    subprocess.call(["git", "-C", str(root), "log", "-1", "--oneline"])
+
+
 def main() -> None:
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+    os.environ["ACCELERATE_MIXED_PRECISION"] = "no"
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     root = _root()
+    _print_git(root)
     src = root / "src"
     if src.exists():
         sys.path.insert(0, str(src))
