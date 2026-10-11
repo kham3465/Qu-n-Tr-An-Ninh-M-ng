@@ -9,6 +9,27 @@ def test_train_pins_single_gpu():
     assert _train_device_map() == {"": 0}
 
 
+def test_cast_skips_when_no_bf16():
+    from slatriage.train_qlora import _cast_non_quant_to_fp16
+
+    class W:
+        dtype = None
+        is_quantized = False
+        quant_state = None
+
+    class M:
+        weight = W()
+        config = type("C", (), {})()
+
+        def modules(self):
+            return [self]
+
+        def to(self, _dt):
+            raise AssertionError("should not cast")
+
+    _cast_non_quant_to_fp16(M())
+
+
 def test_adapter_complete_and_latest_ckpt(tmp_path):
     from slatriage.train_qlora import adapter_complete, latest_checkpoint
 

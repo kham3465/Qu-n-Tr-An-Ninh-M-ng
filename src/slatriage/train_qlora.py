@@ -107,6 +107,8 @@ def _make_train_args(
     *,
     save_steps: int = 50,
     has_eval: bool = False,
+    fp16: bool = False,
+    bf16: bool = False,
 ):
     common = dict(
         output_dir=str(out_dir / "checkpoints"),
@@ -118,8 +120,8 @@ def _make_train_args(
         save_strategy="steps",
         save_steps=save_steps,
         save_total_limit=2,
-        fp16=True,
-        bf16=False,
+        fp16=fp16,
+        bf16=bf16,
         gradient_checkpointing=True,
         lr_scheduler_type="cosine",
         warmup_ratio=0.03,
@@ -209,6 +211,7 @@ def pin_single_gpu() -> None:
     import os
 
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+    os.environ.setdefault("ACCELERATE_MIXED_PRECISION", "no")
 
 
 def _train_device_map():
@@ -230,6 +233,23 @@ def _load_causal(base_model: str, bnb: Any):
             last = e
             continue
     raise TypeError(last)
+
+
+def _cast_non_quant_to_fp16(model):
+    """T4 has no BF16 AMP. Heads/norms left in bf16 crash GradScaler."""
+    import torch
+
+    for module in model.modules():
+        if getattr(module, "weight", None) is None:
+            continue
+        w = module.weight
+        if getattr(w, "is_quantized", False) or getattr(w, "quant_state", None) is not None:
+            continue
+        if getattr(w, "dtype", None) == torch.bfloat16:
+            module.to(torch.float16)
+    if getattr(model, "config", None) is not None:
+        model.config.torch_dtype = torch.float16
+    return model
 
 
 def train_one_role(
@@ -278,7 +298,7 @@ def train_one_role(
     if ckpt:
         print(f"RESUME checkpoint {ckpt.name}")
 
-    model = _load_causal(base_model, _build_bnb())
+    model = _cast_non_quant_to_fp16(_load_causal(base_model, _build_bnb()))
     model.config.use_cache = False
     if hasattr(model, "enable_input_require_grads"):
         model.enable_input_require_grads()
@@ -286,6 +306,7 @@ def train_one_role(
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
     except TypeError:
         model = prepare_model_for_kbit_training(model)
+    model = _cast_non_quant_to_fp16(model)
 
     peft_config = LoraConfig(
         r=int(lora_cfg.get("r", 16)),
@@ -298,10 +319,24 @@ def train_one_role(
 
     trainer = None
     last_err: Exception | None = None
-    for optim in ("paged_adamw_8bit", "adamw_torch"):
+    attempts = (
+        ("paged_adamw_8bit", False),
+        ("adamw_torch", False),
+        ("adamw_torch", True),
+    )
+    for optim, use_fp16 in attempts:
         try:
             args = _make_train_args(
-                out_dir, max_seq, epochs, lr, seed, optim, save_steps=save_steps, has_eval=eval_dataset is not None
+                out_dir,
+                max_seq,
+                epochs,
+                lr,
+                seed,
+                optim,
+                save_steps=save_steps,
+                has_eval=eval_dataset is not None,
+                fp16=use_fp16,
+                bf16=False,
             )
             trainer = _make_trainer(model, tokenizer, dataset, peft_config, args, eval_dataset=eval_dataset)
             if ckpt:
@@ -312,7 +347,7 @@ def train_one_role(
             break
         except Exception as e:
             last_err = e
-            print(f"WARN train retry optim={optim}: {type(e).__name__}")
+            print(f"WARN train retry optim={optim} fp16={use_fp16}: {type(e).__name__}: {e}")
             trainer = None
             continue
     if last_err is not None or trainer is None:
