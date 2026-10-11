@@ -26,6 +26,7 @@ def _root() -> Path:
 
 
 def main() -> None:
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     root = _root()

@@ -204,11 +204,24 @@ def _make_trainer(model, tokenizer, dataset, peft_config, args, eval_dataset=Non
     return _try_init(SFTTrainer, attempts)
 
 
+def pin_single_gpu() -> None:
+    """QLoRA SFT cannot split 7B across two T4s (cuda:0 vs cuda:1)."""
+    import os
+
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+
+
+def _train_device_map():
+    return {"": 0}
+
+
 def _load_causal(base_model: str, bnb: Any):
     import torch
     from transformers import AutoModelForCausalLM
 
-    common = dict(quantization_config=bnb, device_map="auto", trust_remote_code=True)
+    pin_single_gpu()
+    device_map = _train_device_map()
+    common = dict(quantization_config=bnb, device_map=device_map, trust_remote_code=True)
     last = None
     for extra in (dict(dtype=torch.float16), dict(torch_dtype=torch.float16), {}):
         try:

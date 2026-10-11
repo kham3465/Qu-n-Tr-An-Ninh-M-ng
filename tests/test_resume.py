@@ -3,6 +3,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_train_pins_single_gpu():
+    from slatriage.train_qlora import _train_device_map
+
+    assert _train_device_map() == {"": 0}
+
+
 def test_adapter_complete_and_latest_ckpt(tmp_path):
     from slatriage.train_qlora import adapter_complete, latest_checkpoint
 
