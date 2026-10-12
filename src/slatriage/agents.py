@@ -27,7 +27,7 @@ class ExpertAgent:
             if self.prompt_only
             else expert_system(self.family, trained_hint=True)
         )
-        raw = self.llm.generate(system, expert_user(alert), temperature=0.0)
+        raw = self.llm.generate(system, expert_user(alert), temperature=0.0, max_new_tokens=160)
         try:
             data = extract_json_object(raw)
         except ValueError:
@@ -54,6 +54,10 @@ class ExpertAgent:
         )
 
 
+INFER_ALERT_CHUNK = 4
+INFER_JUDGE_CHUNK = 6
+
+
 class JudgeAgent:
     def __init__(self, llm: LLMBackend, *, forbid_invent: bool = True, prompt_only: bool = False):
         self.llm = llm
@@ -61,14 +65,31 @@ class JudgeAgent:
         self.prompt_only = prompt_only
 
     def merge(self, experts: list[ExpertDecision], alerts: list[Alert]) -> JudgeOutput:
+        if not alerts:
+            return JudgeOutput(findings=[], invented_count=0, raw="")
+        if len(alerts) <= INFER_JUDGE_CHUNK:
+            return self._merge_chunk(experts, alerts)
+        findings: list[JudgeFinding] = []
+        invented = 0
+        raws: list[str] = []
+        for i in range(0, len(alerts), INFER_JUDGE_CHUNK):
+            part = alerts[i : i + INFER_JUDGE_CHUNK]
+            ids = {a.alert_id for a in part}
+            sub = self._merge_chunk([e for e in experts if e.alert_id in ids], part)
+            findings.extend(sub.findings)
+            invented += int(sub.invented_count or 0)
+            if sub.raw:
+                raws.append(sub.raw)
+        return JudgeOutput(findings=findings, invented_count=invented, raw="\n".join(raws))
+
+    def _merge_chunk(self, experts: list[ExpertDecision], alerts: list[Alert]) -> JudgeOutput:
         system = judge_system(forbid_invent=self.forbid_invent)
         if self.prompt_only:
             system = role_prompt_council_system("J")
-        raw = self.llm.generate(system, judge_user(experts, alerts), temperature=0.0)
+        raw = self.llm.generate(system, judge_user(experts, alerts), temperature=0.0, max_new_tokens=256)
         try:
             data = extract_json_object(raw)
         except ValueError:
-            # fallback: keep expert keeps only
             findings = [
                 JudgeFinding(
                     alert_id=e.alert_id,
@@ -98,8 +119,7 @@ class JudgeAgent:
         return JudgeOutput(findings=findings, invented_count=invented, raw=raw)
 
 
-def single_shot_triage(llm: LLMBackend, alerts: list[Alert]) -> list[dict[str, Any]]:
-    raw = llm.generate(single_prompt_system(), single_prompt_user(alerts), temperature=0.0)
+def _parse_single_shot(raw: str, alerts: list[Alert]) -> list[dict[str, Any]]:
     try:
         data = extract_json_object(raw)
     except ValueError:
@@ -124,4 +144,21 @@ def single_shot_triage(llm: LLMBackend, alerts: list[Alert]) -> list[dict[str, A
                 "reason": item.get("reason"),
             }
         )
+    return out
+
+
+def single_shot_triage(llm: LLMBackend, alerts: list[Alert]) -> list[dict[str, Any]]:
+    if not alerts:
+        return []
+    if len(alerts) <= INFER_ALERT_CHUNK:
+        raw = llm.generate(
+            single_prompt_system(),
+            single_prompt_user(alerts),
+            temperature=0.0,
+            max_new_tokens=256,
+        )
+        return _parse_single_shot(raw, alerts)
+    out: list[dict[str, Any]] = []
+    for i in range(0, len(alerts), INFER_ALERT_CHUNK):
+        out.extend(single_shot_triage(llm, alerts[i : i + INFER_ALERT_CHUNK]))
     return out

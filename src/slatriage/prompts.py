@@ -14,6 +14,11 @@ FAMILY_DESC = {
 }
 
 
+def _clip(text: Any, n: int = 400) -> str:
+    s = str(text or "")
+    return s if len(s) <= n else s[:n] + "\n..."
+
+
 def _alert_block(alert: Alert) -> str:
     return json.dumps(
         {
@@ -22,11 +27,10 @@ def _alert_block(alert: Alert) -> str:
             "family": alert.family,
             "lines": alert.lines,
             "source": alert.source,
-            "description": alert.description,
-            "snippet": alert.snippet,
+            "description": _clip(alert.description, 400),
+            "snippet": _clip(alert.snippet, 500),
         },
         ensure_ascii=False,
-        indent=2,
     )
 
 
@@ -86,11 +90,27 @@ def judge_system(forbid_invent: bool = True) -> str:
 
 
 def judge_user(expert_decisions: list[ExpertDecision], alerts: list[Alert]) -> str:
+    experts = []
+    for e in expert_decisions:
+        row = e.to_dict()
+        row.pop("raw", None)
+        if row.get("reason"):
+            row["reason"] = _clip(row.get("reason"), 160)
+        experts.append(row)
+    compact = [
+        {
+            "alert_id": a.alert_id,
+            "detector": a.detector,
+            "family": a.family,
+            "lines": a.lines,
+        }
+        for a in alerts
+    ]
     return (
         "Expert decisions:\n"
-        + json.dumps([e.to_dict() for e in expert_decisions], ensure_ascii=False, indent=2)
+        + json.dumps(experts, ensure_ascii=False)
         + "\n\nOriginal alerts:\n"
-        + json.dumps([a.to_dict() for a in alerts], ensure_ascii=False, indent=2)
+        + json.dumps(compact, ensure_ascii=False)
         + "\nOutput Judge JSON only."
     )
 

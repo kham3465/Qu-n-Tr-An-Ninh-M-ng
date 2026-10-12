@@ -34,6 +34,36 @@ def test_config_a_keeps_all_scoped():
     assert all(p["decision"] == "keep" for p in r.predictions)
 
 
+def test_single_shot_chunks_many_alerts():
+    from slatriage.agents import INFER_ALERT_CHUNK, single_shot_triage
+    from slatriage.llm import MockLLM
+    from slatriage.schema import Alert
+
+    alerts = [
+        Alert(alert_id=f"a{i}", detector="reentrancy-eth", family="R", lines=[i], source="x.sol")
+        for i in range(INFER_ALERT_CHUNK + 3)
+    ]
+    out = single_shot_triage(MockLLM(), alerts)
+    assert {p["alert_id"] for p in out} == {a.alert_id for a in alerts}
+
+
+def test_judge_chunks_many_alerts():
+    from slatriage.agents import INFER_JUDGE_CHUNK, JudgeAgent
+    from slatriage.llm import MockLLM
+    from slatriage.schema import Alert, ExpertDecision
+
+    alerts = [
+        Alert(alert_id=f"a{i}", detector="reentrancy-eth", family="R", lines=[i], source="x.sol")
+        for i in range(INFER_JUDGE_CHUNK + 4)
+    ]
+    experts = [
+        ExpertDecision(alert_id=a.alert_id, family="R", decision="keep", line=a.lines[0], detector=a.detector)
+        for a in alerts
+    ]
+    out = JudgeAgent(MockLLM(), forbid_invent=True).merge(experts, alerts)
+    assert out.findings
+
+
 def test_mock_council_e():
     rows = read_jsonl(ROOT / "data" / "labels" / "demo_labels.jsonl")
     alerts = [Alert.from_dict(r) for r in rows]

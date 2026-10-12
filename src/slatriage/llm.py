@@ -113,6 +113,7 @@ class HFModelPool:
 
         os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
         os.environ["ACCELERATE_MIXED_PRECISION"] = "no"
+        os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
         self._tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
@@ -167,7 +168,13 @@ class HFModelPool:
         self._peft.set_adapter(name)
         self._current = name
 
-    def generate(self, system: str, user: str, *, temperature: float = 0.0, max_new_tokens: int = 512) -> str:
+    def _input_cap(self) -> int:
+        mid = (self.model_id or "").lower()
+        if "14b" in mid or "13b" in mid:
+            return 1024
+        return 1536
+
+    def generate(self, system: str, user: str, *, temperature: float = 0.0, max_new_tokens: int = 256) -> str:
         assert self._tokenizer is not None and self._model is not None
         messages = [
             {"role": "system", "content": system},
@@ -178,14 +185,28 @@ class HFModelPool:
             device = next(self._model.parameters()).device
         except StopIteration:
             device = "cpu"
-        inputs = self._tokenizer(prompt, return_tensors="pt").to(device)
+        cap = self._input_cap()
+        inputs = self._tokenizer(
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=cap,
+        ).to(device)
         do_sample = temperature is not None and temperature > 0
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
         out = self._model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
             do_sample=do_sample,
             temperature=temperature if do_sample else None,
             pad_token_id=self._tokenizer.pad_token_id,
+            use_cache=True,
         )
         gen = out[0][inputs["input_ids"].shape[-1] :]
         return self._tokenizer.decode(gen, skip_special_tokens=True)
@@ -230,7 +251,7 @@ class HuggingFaceLLM(LLMBackend):
         self.adapter_name = adapter_name or (str(adapter_path).replace("\\", "/").rstrip("/").split("/")[-1] if adapter_path else "base")
         self._pool = pool or get_hf_pool(model_id, load_in_4bit=load_in_4bit, device_map=device_map)
 
-    def generate(self, system: str, user: str, *, temperature: float = 0.0, max_new_tokens: int = 512) -> str:
+    def generate(self, system: str, user: str, *, temperature: float = 0.0, max_new_tokens: int = 256) -> str:
         self._pool.select(self.adapter_name if self.adapter_path else None, self.adapter_path)
         return self._pool.generate(system, user, temperature=temperature, max_new_tokens=max_new_tokens)
 
