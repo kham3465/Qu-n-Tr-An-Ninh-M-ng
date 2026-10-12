@@ -98,11 +98,11 @@ Quy trình đã làm xong tới hết nhãn:
 2. Chạy Slither từng file, chuẩn hóa alert.
 3. Gán họ bằng bảng detector.
 4. Khớp dòng / họ → `data/labels/labels_v1.jsonl`.
-5. Xuất mẫu học R, A, C, J (loại unknown).
+5. Xuất mẫu học R, A, C, J (loại unknown **và loại 34 file hold-out**, xem mục 6).
 6. Dựng ma trận coverage từ nhãn.
 7. Thêm SolidiFI (bug bơm, chỉ họ R/A/C) làm **tập học phụ** → `labels_solidifi.jsonl` + `data/sft/combined`. F1 chính vẫn Curated.
 
-Chưa làm: học bốn adapter trên `data/sft/combined`, chạy A–E–G, đo trên `labels_v1`, viết kết luận.
+Chưa làm: học bốn adapter trên `data/sft/combined`, chạy A–E–G, đo **trên hold-out**, viết kết luận.
 
 ---
 
@@ -118,7 +118,7 @@ Chưa làm: học bốn adapter trên `data/sft/combined`, chạy A–E–G, đo
 
 Họ A keep mỏng vì nhiều lỗ access-control Curated (sai tên constructor, ghi mapping) **không** trùng detector Slither A — đúng ô ABSENT, không phải “sót keep”. Ghi rõ khi viết báo. Không dùng dataset HuggingFace gắn nhãn theo chính Slither (học vẹt tool đang được triage).
 
-Tập học phụ SolidiFI (200 file RAC, bug bơm, **không** vào F1 chính): 6955 alert. Keep/drop R 1385/303, A 1933/2403, C 923/8. SFT train gộp (`data/sft/combined`): R=1847, A=4403, C=1005, J=633. C drop rất mỏng — LoRA-C sẽ lệch keep.
+Tập học phụ SolidiFI (200 file RAC, bug bơm, **không** vào F1 chính): 6955 alert. Keep/drop R 1385/303, A 1933/2403, C 923/8. SFT Curated (đã loại hold-out): R=97, A=44, C=51, J=84. SFT train gộp (`data/sft/combined`): R=1785, A=4380, C=982, J=1323 (mẫu Judge chia lô 6 alert cho khớp lúc chạy thật nên nhiều dòng hơn trước). C drop rất mỏng (còn 7 drop Curated, 15 drop cả bộ gộp, so với 967 keep) — LoRA-C sẽ lệch keep.
 
 ---
 
@@ -127,7 +127,7 @@ Tập học phụ SolidiFI (200 file RAC, bug bơm, **không** vào F1 chính): 
 Làm theo thứ tự; bước sau cần output bước trước.
 
 **Bước 1 — Học bốn adapter (đang chờ)**  
-Học R, rồi A, rồi C, rồi J trên `data/sft/combined` (Curated + SolidiFI phụ). F1 / eval sau train chỉ trên `labels_v1`. Cùng một model nền, mỗi vai một LoRA. Xong bước này mới có hệ E.
+Học R, rồi A, rồi C, rồi J trên `data/sft/combined` (Curated + SolidiFI phụ). F1 / eval sau train chỉ trên **file hold-out** của `labels_v1` (mục 6). Cùng một model nền, mỗi vai một LoRA. Xong bước này mới có hệ E.
 
 Kaggle: GPU T4 + Internet, clone git (không zip):
 
@@ -144,9 +144,28 @@ Một lệnh sau khi có adapter (và pred nếu đã chạy hội đồng):
 `python scripts/after_train.py` — skip `pred_*.jsonl` đã có; `--force` để chạy lại.  
 Có GPU và muốn tự chạy B–G + ablation: thêm `--run-hf`.
 
-Ra `reports/BAO-CAO-CHI-SO.md`, `paper_stats.json`, `reports/figures/fig01…fig12.png`: nhãn, SFT, coverage, P/R/F1, F1 theo họ, invent, gain E vs B, ablation tắt LoRA-R, loss train, TP/FP/FN. F1 chính chỉ trên `labels_v1`.
+Ra `reports/BAO-CAO-CHI-SO.md`, `paper_stats.json`, `reports/figures/fig01…fig12.png`: nhãn, SFT, coverage, P/R/F1, F1 theo họ, invent, gain E vs B, ablation tắt LoRA-R, loss train, TP/FP/FN. F1 chính chỉ trên 34 file hold-out (120 alert), kèm khoảng tin cậy 95% (bootstrap).
 
 **Bước 4 — Chỉ khi 1–3 xong**  
 Thêm tập ngoài Curated (110 ca SmartAudit, Web3Bugs biên dịch được) nếu đủ mẫu; dưới 20 file thì ghi “chưa đủ”, không ép RQ. Viết báo đúng khung *triage cảnh báo*, không viết thành “hệ audit đa tác nhân như SmartAudit”.
 
 Câu bảo vệ ngắn: *Ba họ vì protocol (tín hiệu + nhãn + dị thể FP + mẫu) trên Slither×Curated chỉ R/A/C đủ. Keep/drop là phán trên alert, không trên detector. Sót được kê trong ô ABSENT, không bịa lỗ.*
+
+---
+
+## 6. Đánh giá đúng cách (chống rò rỉ)
+
+Bản trước từng chấm F1 trên toàn bộ `labels_v1` trong khi mẫu học cũng lấy từ đó, nên đo ra là khả năng thuộc lòng. Bản hiện tại sửa như sau:
+
+| Vấn đề | Cách xử lý |
+| --- | --- |
+| Train và test trùng file | `data/labels/holdout_sources.json` (34/112 file, seed 0) bị **loại khỏi mọi SFT** (`export_sft_jsonl`, `export_judge_sft`, `merge_sft_jsonl`, `scripts/merge_sft.py`, `scripts/prepare_curated.py`). Hội đồng chỉ chạy trên các file này (`run_council.py --holdout`, mặc định bật trong `after_train.py`). Báo cáo chỉ tính F1 trên hold-out. |
+| Judge học bằng đáp án | Mẫu Judge dùng đúng prompt lúc chạy thật (`judge_system` / `judge_user`): đầu vào là **quyết định chuyên gia giả lập** (nhãn thật, lật ngẫu nhiên 10%, seed cố định), không có nhãn thật. Đích là những alert chuyên gia đã keep, `invented_count=0`. Judge học đúng một luật: chỉ giữ cái chuyên gia giữ, không bịa. Mẫu SolidiFI cũ được chuyển bằng `rewrite_legacy_judge_sft` (không còn nhãn gốc, nên alert thiếu dòng nếu trước đó là drop). |
+| Alert bị model bỏ sót | `score_aligned` đi theo **gold**: alert không có dự đoán tính là `drop` và ghi vào `n_missing`. Không còn lợi từ việc im lặng. |
+| JSON hỏng bị giấu thành `drop` | Đếm riêng `parse_fail` (trong metric, `*.report.json` và bảng báo cáo). |
+| F1 dao động vì mẫu ít | Mỗi F1 kèm khoảng tin cậy 95% bootstrap (`f1_ci`). Họ A, C trên hold-out rất ít alert, nên đọc kèm khoảng này. |
+| Prompt dài bị cắt cuối | Cắt từ **bên trái** và in cảnh báo mỗi lần cắt (`HFModelPool.n_truncated`). Danh sách dòng trong prompt Judge giới hạn 4 dòng đầu. |
+
+Còn hạn chế cần ghi vào báo: hold-out chỉ 120 alert (họ A, C rất mỏng); LoRA-C vẫn lệch keep vì thiếu drop; SolidiFI là bug bơm nên phân bố khác Curated; mẫu Judge dùng chuyên gia giả lập chứ chưa phải đầu ra của LoRA R/A/C thật.
+
+Kiểm thử: `pip install -r requirements.txt && python -m pytest -q`. `tests/test_leakage.py` giữ các bất biến ở bảng trên (SFT không chứa file hold-out, prompt Judge không chứa nhãn, alert bỏ sót bị phạt).

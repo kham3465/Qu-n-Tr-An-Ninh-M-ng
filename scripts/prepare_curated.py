@@ -27,6 +27,7 @@ from slatriage.dataset import export_judge_sft, export_sft_jsonl
 from slatriage.families import assign_family
 from slatriage.io_utils import write_json, write_jsonl
 from slatriage.label_match import match_alert
+from slatriage.split import load_or_make_holdout
 from slatriage.slither_runner import (
     make_alert_id,
     normalize_detectors,
@@ -180,13 +181,18 @@ def main() -> None:
     stats_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
 
+    # Hold-out files never enter train: F1 is reported only on them.
+    held = set(load_or_make_holdout(ROOT / "data" / "labels" / "holdout_sources.json", rows))
+    print(f"holdout files excluded from SFT: {len(held)}")
     sft_dir = ROOT / "data" / "sft"
     for role in ("R", "A", "C"):
-        n = export_sft_jsonl(labels_path, sft_dir / f"sft_{role}.jsonl", family=role)
-        export_sft_jsonl(labels_path, ROOT / "adapters" / role / f"sft_{role}.jsonl", family=role)
+        n = export_sft_jsonl(labels_path, sft_dir / f"sft_{role}.jsonl", family=role, exclude_sources=held)
+        export_sft_jsonl(
+            labels_path, ROOT / "adapters" / role / f"sft_{role}.jsonl", family=role, exclude_sources=held
+        )
         print(f"SFT {role}: {n} rows")
-    n_j = export_judge_sft(labels_path, sft_dir / "sft_J.jsonl")
-    export_judge_sft(labels_path, ROOT / "adapters" / "J" / "sft_J.jsonl")
+    n_j = export_judge_sft(labels_path, sft_dir / "sft_J.jsonl", exclude_sources=held)
+    export_judge_sft(labels_path, ROOT / "adapters" / "J" / "sft_J.jsonl", exclude_sources=held)
     print(f"SFT J: {n_j} rows")
     print("READY_TO_TRAIN: python scripts/train_lora.py --all --do-train")
 

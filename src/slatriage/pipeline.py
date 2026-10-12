@@ -1,24 +1,8 @@
-"""End-to-end flow: .sol → Slither → family agents → Judge (P2 wires models later)."""
+"""Judge grounding check (the dataclasses live in schema.py)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any
-
-
-@dataclass
-class AgentDecision:
-    family: str
-    alert_id: str
-    decision: str  # keep | drop
-    line: int | None = None
-    reason: str = ""
-
-
-@dataclass
-class JudgeOutput:
-    findings: list[dict[str, Any]] = field(default_factory=list)
-    invented_count: int = 0
 
 
 def invent_count(expert_findings: list[dict[str, Any]], judge_findings: list[dict[str, Any]]) -> int:

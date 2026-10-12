@@ -88,12 +88,19 @@ def load_train_curves(adapters: Path) -> tuple[dict[str, list[float]], dict[str,
     return loss, ev
 
 
-def evaluate_preds(gold: list[dict[str, Any]], pred_files: list[Path]) -> tuple[dict, dict]:
+def evaluate_preds(
+    gold: list[dict[str, Any]],
+    pred_files: list[Path],
+    only_sources: set[str] | None = None,
+) -> tuple[dict, dict]:
     evals: dict[str, Any] = {}
     invent: dict[str, Any] = {}
     for pred_path in pred_files:
         name = pred_name(pred_path)
-        evals[name] = score_aligned(gold, read_jsonl(pred_path))
+        preds = read_jsonl(pred_path)
+        if only_sources is not None:
+            preds = filter_by_sources(preds, only_sources)
+        evals[name] = score_aligned(gold, preds)
         report = pred_path.with_suffix(".report.json")
         alt = pred_path.parent / f"{pred_path.stem}.report.json"
         for cand in (report, alt):
@@ -148,15 +155,13 @@ def build_payload(
     closed = load_closed(closed_path)
     cov = matrix_summary(build_matrix(labels, closed, all_sources=all_sources) if labels else [])
 
-    evals, invent = evaluate_preds(labels, pred_files)
+    # F1 is reported ONLY on hold-out files. SFT excludes them (dataset.export_*), so the model never saw them.
     hold_src = load_or_make_holdout(root / "data" / "labels" / "holdout_sources.json", labels)
     hold_set = set(hold_src)
     train_src = sorted({str(r.get("source") or "") for r in labels if r.get("source") and r.get("source") not in hold_set})
     gold_hold = filter_by_sources(labels, hold_set)
-    eval_holdout: dict[str, Any] = {}
-    for pred_path in pred_files:
-        name = pred_name(pred_path)
-        eval_holdout[name] = score_aligned(gold_hold, filter_by_sources(read_jsonl(pred_path), hold_set))
+    evals, invent = evaluate_preds(gold_hold, pred_files, only_sources=hold_set)
+    eval_holdout = evals
     gain = None
     if "E" in evals and "B" in evals and "f1" in evals["E"] and "f1" in evals["B"]:
         gain = {
@@ -185,6 +190,7 @@ def build_payload(
         },
         "coverage": cov,
         "eval": evals,
+        "eval_scope": "holdout",
         "invented_count_by_config": invent,
         "relative_gain_E_vs_B": gain,
         "train_loss": train_loss,
@@ -205,9 +211,14 @@ def build_payload(
 def _md_prf(name: str, m: dict) -> str:
     if "error" in m and "f1" not in m:
         return f"| {name} | - | - | - | {m.get('n', 0)} |"
+    ci = m.get("f1_ci")
+    f1 = f"{m.get('f1', 0):.3f}" + (f" [{ci[0]:.2f}-{ci[1]:.2f}]" if ci else "")
+    extra = ""
+    if m.get("n_missing") or m.get("parse_fail"):
+        extra = f" (thieu={m.get('n_missing', 0)}, parse_fail={m.get('parse_fail', 0)})"
     return (
         f"| {name} | {m.get('precision', 0):.3f} | {m.get('recall', 0):.3f} | "
-        f"{m.get('f1', 0):.3f} | {m.get('n_scored', m.get('n', 0))} |"
+        f"{f1} | {m.get('n_scored', m.get('n', 0))}{extra} |"
     )
 
 
@@ -253,7 +264,13 @@ def write_markdown(payload: dict[str, Any], figures: dict[str, str | None], out_
             f"| {cat} | {cells.get('KEEP', 0)} | {cells.get('DROP', 0)} | "
             f"{cells.get('ABSENT', 0)} | {cells.get('UNKNOWN', 0)} |"
         )
-    lines += ["", "## 3. Hoi dong (sau pred_*.jsonl)", "", "| config | precision | recall | f1 | n |", "| --- | ---: | ---: | ---: | ---: |"]
+    lines += [
+        "",
+        "## 3. Hoi dong (chi tren file hold-out, khong nam trong train)",
+        "",
+        "| config | precision | recall | f1 | n |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
     if evals:
         for name, m in evals.items():
             if not isinstance(m, dict) or name in ("relative_gain_E_vs_B",):

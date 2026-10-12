@@ -14,6 +14,10 @@ FAMILY_DESC = {
 }
 
 
+# A long function can span dozens of lines; the Judge only needs where the alert starts.
+JUDGE_MAX_LINES = 4
+
+
 def _clip(text: Any, n: int = 400) -> str:
     s = str(text or "")
     return s if len(s) <= n else s[:n] + "\n..."
@@ -102,7 +106,7 @@ def judge_user(expert_decisions: list[ExpertDecision], alerts: list[Alert]) -> s
             "alert_id": a.alert_id,
             "detector": a.detector,
             "family": a.family,
-            "lines": a.lines,
+            "lines": a.lines[:JUDGE_MAX_LINES],
         }
         for a in alerts
     ]

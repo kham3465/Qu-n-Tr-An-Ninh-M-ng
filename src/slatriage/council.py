@@ -77,7 +77,14 @@ def _run_experts(
     return decisions
 
 
-def _predictions_from_judge(judge: JudgeOutput, alerts: list[Alert]) -> list[dict[str, Any]]:
+def _predictions_from_judge(
+    judge: JudgeOutput,
+    alerts: list[Alert],
+    experts: list[ExpertDecision] | None = None,
+) -> list[dict[str, Any]]:
+    """Final keep/drop per alert. An alert whose expert output was unparseable keeps reason=parse_fail
+    so the metrics can count it instead of hiding it inside a plain `drop`."""
+    failed = {e.alert_id for e in experts or [] if e.reason == "parse_fail"}
     keep_ids = {f.alert_id for f in judge.findings if f.decision == "keep"}
     preds = []
     for a in alerts:
@@ -91,7 +98,7 @@ def _predictions_from_judge(judge: JudgeOutput, alerts: list[Alert]) -> list[dic
                 "decision": decision,
                 "line": line if line is not None else (a.lines[0] if a.lines else None),
                 "family": a.family,
-                "reason": "judge_final",
+                "reason": "parse_fail" if a.alert_id in failed else "judge_final",
             }
         )
     return preds
@@ -115,7 +122,7 @@ def config_C(
         alerts=alerts,
         expert_decisions=experts,
         judge=judge,
-        predictions=_predictions_from_judge(judge, alerts),
+        predictions=_predictions_from_judge(judge, alerts, experts),
     )
 
 
@@ -138,7 +145,7 @@ def config_D_or_E(
         alerts=alerts,
         expert_decisions=experts,
         judge=judge,
-        predictions=_predictions_from_judge(judge, alerts),
+        predictions=_predictions_from_judge(judge, alerts, experts),
     )
 
 

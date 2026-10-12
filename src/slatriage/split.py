@@ -36,3 +36,15 @@ def load_or_make_holdout(path: Path, labels: list[dict[str, Any]], *, seed: int 
     srcs = holdout_sources(labels, seed=seed, frac=frac)
     write_holdout(path, srcs, seed=seed, frac=frac)
     return srcs
+
+
+def read_holdout(path: Path) -> set[str]:
+    """Hold-out sources if the file exists, else empty set (nothing excluded)."""
+    path = Path(path)
+    if not path.exists():
+        return set()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return set()
+    return {str(s) for s in (data.get("sources") or [])}

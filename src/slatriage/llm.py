@@ -102,6 +102,7 @@ class HFModelPool:
         self._peft = None
         self._loaded: set[str] = set()
         self._current: str | None = None
+        self.n_truncated = 0  # prompts longer than the input cap (should stay near 0)
 
     def _load_base(self) -> None:
         if self._model is not None:
@@ -186,6 +187,12 @@ class HFModelPool:
         except StopIteration:
             device = "cpu"
         cap = self._input_cap()
+        # Cut from the LEFT: the end of the prompt holds the instruction and the generation prefix.
+        self._tokenizer.truncation_side = "left"
+        n_tokens = len(self._tokenizer(prompt, add_special_tokens=False)["input_ids"])
+        if n_tokens > cap:
+            self.n_truncated += 1
+            print(f"WARN prompt truncated {n_tokens}->{cap} tokens (total={self.n_truncated})", flush=True)
         inputs = self._tokenizer(
             prompt,
             return_tensors="pt",

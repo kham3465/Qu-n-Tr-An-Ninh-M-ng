@@ -88,7 +88,10 @@ def test_judge_export_chunks(tmp_path):
     n = export_judge_sft(labels, out, max_items=16)
     assert n == 3
     got = [json.loads(x) for x in out.read_text(encoding="utf-8").splitlines() if x.strip()]
-    assert all(len(json.loads(g["messages"][1]["content"].split("Alerts:\n", 1)[1])) <= 16 for g in got)
+    for g in got:
+        user = g["messages"][1]["content"]
+        experts = json.loads(user.split("Expert decisions:\n", 1)[1].split("\n\nOriginal", 1)[0])
+        assert len(experts) <= 16
 
 
 def test_messages_to_text_fallback():

@@ -26,6 +26,12 @@ def main() -> None:
     ap.add_argument("--adapters", type=Path, default=ROOT / "adapters")
     ap.add_argument("--pred-dir", type=Path, default=ROOT / "reports")
     ap.add_argument("--gold", type=Path, default=ROOT / "data" / "labels" / "labels_v1.jsonl")
+    ap.add_argument(
+        "--holdout",
+        type=Path,
+        default=ROOT / "data" / "labels" / "holdout_sources.json",
+        help="council runs only on these files; F1 is reported only on them",
+    )
     ap.add_argument("--skip-baseline-a", action="store_true")
     ap.add_argument("--run-hf", action="store_true", help="run B/C/D/E/G with adapters (needs GPU)")
     ap.add_argument("--resume", action="store_true", default=True, help="skip pred/adapters already done")
@@ -54,6 +60,8 @@ def main() -> None:
                 str(args.gold),
                 "--config",
                 "A",
+                "--holdout",
+                str(args.holdout),
                 "--backend",
                 "mock",
                 "--out",
@@ -120,6 +128,8 @@ def main() -> None:
                 str(args.gold),
                 "--config",
                 cfg_flag,
+                "--holdout",
+                str(args.holdout),
                 "--backend",
                 "hf",
                 "--model",

@@ -17,6 +17,7 @@ from slatriage.council import run_config
 from slatriage.io_utils import read_jsonl, write_json, write_jsonl
 from slatriage.llm import get_backend
 from slatriage.schema import Alert
+from slatriage.split import read_holdout
 
 
 def load_alerts(path: Path) -> list[Alert]:
@@ -38,9 +39,19 @@ def main() -> None:
     ap.add_argument("--adapter-j", type=Path, default=None)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--sol-path", default="")
+    ap.add_argument(
+        "--holdout",
+        type=Path,
+        default=None,
+        help="holdout_sources.json: run only on those files (the only set F1 is reported on)",
+    )
     args = ap.parse_args()
 
     alerts = load_alerts(args.alerts)
+    if args.holdout:
+        held = read_holdout(args.holdout)
+        alerts = [a for a in alerts if a.source in held]
+        print(f"holdout filter: {len(held)} files -> {len(alerts)} alerts")
     if args.backend == "mock":
         base = get_backend("mock")
         g_llm = base
@@ -89,6 +100,7 @@ def main() -> None:
 
     preds = []
     invent_total = 0
+    parse_fail = 0
     per_source = []
     for src, group in by_src.items():
         report = run_config(
@@ -103,6 +115,7 @@ def main() -> None:
         )
         for p in report.predictions:
             p.setdefault("source", src)
+            parse_fail += p.get("reason") == "parse_fail"
             preds.append(p)
         if report.judge:
             invent_total += int(report.judge.invented_count or 0)
@@ -116,13 +129,14 @@ def main() -> None:
         {
             "config": args.config,
             "invented_count": invent_total,
+            "parse_fail": parse_fail,
             "judge": {"invented_count": invent_total},
             "n_sources": len(by_src),
             "per_source": per_source,
         },
     )
     n = write_jsonl(args.out, preds)
-    print(f"config={args.config} predictions={n} invented={invent_total} sources={len(by_src)} out={args.out.name}")
+    print(f"config={args.config} predictions={n} invented={invent_total} parse_fail={parse_fail} sources={len(by_src)} out={args.out.name}")
 
 
 if __name__ == "__main__":
