@@ -32,7 +32,13 @@ def main() -> None:
     ap.add_argument("--force", action="store_true", help="re-run even if pred exists")
     ap.add_argument("--base", default="Qwen/Qwen2.5-Coder-7B-Instruct")
     ap.add_argument("--g-model", default="deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
+    ap.add_argument(
+        "--configs",
+        default="",
+        help="comma list of HF jobs: B,C,D,E,E_noR,G. Empty = all. Paper-min: E,B",
+    )
     args = ap.parse_args()
+    want = {x.strip() for x in args.configs.split(",") if x.strip()}
 
     def _exists(p: Path) -> bool:
         return p.exists() and p.stat().st_size > 2
@@ -60,19 +66,6 @@ def main() -> None:
     if args.run_hf:
         ad = args.adapters
         hf_jobs = [
-            ("B", []),
-            ("C", []),
-            (
-                "D",
-                [
-                    "--adapter-r",
-                    str(ad / "R"),
-                    "--adapter-a",
-                    str(ad / "A"),
-                    "--adapter-c",
-                    str(ad / "C"),
-                ],
-            ),
             (
                 "E",
                 [
@@ -86,6 +79,7 @@ def main() -> None:
                     str(ad / "J"),
                 ],
             ),
+            ("B", []),
             (
                 "E_noR",
                 [
@@ -97,8 +91,22 @@ def main() -> None:
                     str(ad / "J"),
                 ],
             ),
+            (
+                "D",
+                [
+                    "--adapter-r",
+                    str(ad / "R"),
+                    "--adapter-a",
+                    str(ad / "A"),
+                    "--adapter-c",
+                    str(ad / "C"),
+                ],
+            ),
+            ("C", []),
             ("G", ["--g-model", args.g_model]),
         ]
+        if want:
+            hf_jobs = [(c, e) for c, e in hf_jobs if c in want]
         for cfg, extra in hf_jobs:
             out = args.pred_dir / f"pred_{cfg}.jsonl"
             if args.resume and not args.force and _exists(out):

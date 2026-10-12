@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import subprocess
 import sys
@@ -109,6 +110,13 @@ def _find_adapters(root: Path) -> Path:
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--configs",
+        default="E,B",
+        help="HF configs to run. Default E,B fits a 3h Kaggle quota. All: B,C,D,E,E_noR,G",
+    )
+    args = ap.parse_args()
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
     os.environ["ACCELERATE_MIXED_PRECISION"] = "no"
     if hasattr(sys.stdout, "reconfigure"):
@@ -140,6 +148,8 @@ def main() -> None:
         str(gold),
         "--run-hf",
         "--resume",
+        "--configs",
+        args.configs,
     ]
     rc = subprocess.call(cmd)
     if rc != 0:
