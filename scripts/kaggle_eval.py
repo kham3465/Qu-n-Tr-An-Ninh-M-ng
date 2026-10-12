@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 
@@ -13,6 +14,39 @@ def _first_existing(paths: list[Path]) -> Path | None:
     for p in paths:
         if p and p.exists() and (p.is_file() or p.is_dir()):
             return p
+    return None
+
+
+def _is_adapters(d: Path) -> bool:
+    return (d / "R" / "adapter_config.json").exists() or (d / "R" / "adapter_model.safetensors").exists()
+
+
+def _dump_kaggle() -> None:
+    for base in (Path("/kaggle/input"), Path("/kaggle/working")):
+        if not base.exists():
+            print(f"ls {base}: missing")
+            continue
+        print(f"ls {base}:")
+        for p in sorted(base.iterdir())[:40]:
+            print(f"  {p.name}{'/' if p.is_dir() else ''}")
+
+
+def _unzip_adapters(zpath: Path, dest: Path) -> Path | None:
+    print(f"unzip {zpath} -> {dest}")
+    dest.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zpath) as zf:
+        names = zf.namelist()
+        if not any(n.replace("\\", "/").endswith("R/adapter_config.json") or n.replace("\\", "/").startswith("R/") for n in names):
+            print(f"WARN zip has no adapters/R: {zpath.name}")
+            return None
+        zf.extractall(dest)
+    if _is_adapters(dest):
+        return dest
+    nested = dest / "adapters"
+    if _is_adapters(nested):
+        return nested
+    for p in dest.rglob("R/adapter_config.json"):
+        return p.parent.parent
     return None
 
 
@@ -37,19 +71,41 @@ def _find_gold(root: Path) -> Path:
 
 
 def _find_adapters(root: Path) -> Path:
+    work = Path("/kaggle/working") if Path("/kaggle/working").exists() else root
     candidates = [
         Path(os.environ.get("SLATRIAGE_ADAPTERS") or ""),
-        Path("/kaggle/working/adapters"),
+        work / "adapters",
+        work / "results" / "adapters",
         root / "adapters",
     ]
     for c in candidates:
-        if c and (c / "R" / "adapter_config.json").exists():
+        if c and _is_adapters(c):
             return c
-    inp = Path("/kaggle/input")
-    if inp.exists():
-        for p in sorted(inp.glob("**/R/adapter_config.json")):
+    for base in (Path("/kaggle/input"), work):
+        if not base.exists():
+            continue
+        for p in sorted(base.rglob("R/adapter_config.json")):
             return p.parent.parent
-    raise FileNotFoundError("missing adapters/R — upload slatriage_adapters.zip and unzip")
+    zips: list[Path] = []
+    for base in (Path("/kaggle/input"), work):
+        if not base.exists():
+            continue
+        zips.extend(sorted(base.rglob("slatriage_adapters.zip")))
+        zips.extend(sorted(base.glob("*.zip")))
+    seen: set[str] = set()
+    dest = work / "adapters"
+    for z in zips:
+        key = str(z.resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        found = _unzip_adapters(z, dest)
+        if found:
+            return found
+    _dump_kaggle()
+    raise FileNotFoundError(
+        "missing adapters/R — Add Data: zip train cũ (Output) hoặc upload slatriage_adapters.zip"
+    )
 
 
 def main() -> None:
