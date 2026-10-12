@@ -47,6 +47,21 @@ def test_single_shot_chunks_many_alerts():
     assert {p["alert_id"] for p in out} == {a.alert_id for a in alerts}
 
 
+def test_judge_accepts_list_json():
+    from slatriage.agents import JudgeAgent
+    from slatriage.llm import LLMBackend
+    from slatriage.schema import Alert, ExpertDecision
+
+    class ListJudge(LLMBackend):
+        def generate(self, system, user, **kwargs):
+            return '[{"alert_id":"a1","decision":"keep","line":1}]'
+
+    alerts = [Alert(alert_id="a1", detector="reentrancy-eth", family="R", lines=[1], source="x.sol")]
+    experts = [ExpertDecision(alert_id="a1", family="R", decision="keep", line=1, detector="reentrancy-eth")]
+    out = JudgeAgent(ListJudge(), forbid_invent=True).merge(experts, alerts)
+    assert out.findings and out.findings[0].alert_id == "a1"
+
+
 def test_judge_chunks_many_alerts():
     from slatriage.agents import INFER_JUDGE_CHUNK, JudgeAgent
     from slatriage.llm import MockLLM

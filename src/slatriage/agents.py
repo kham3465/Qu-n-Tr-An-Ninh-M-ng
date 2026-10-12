@@ -103,7 +103,17 @@ class JudgeAgent:
             ]
             return JudgeOutput(findings=findings, invented_count=0, raw=raw)
 
-        findings_raw = data.get("findings") or []
+        if isinstance(data, list):
+            findings_raw = data
+            invented = 0
+        elif isinstance(data, dict):
+            findings_raw = data.get("findings")
+            if not isinstance(findings_raw, list):
+                findings_raw = [data] if data.get("alert_id") else []
+            invented = int(data.get("invented_count") or 0)
+        else:
+            findings_raw = []
+            invented = 0
         findings = [
             JudgeFinding(
                 alert_id=str(f.get("alert_id")),
@@ -115,7 +125,6 @@ class JudgeAgent:
             for f in findings_raw
             if isinstance(f, dict)
         ]
-        invented = int(data.get("invented_count") or 0)
         return JudgeOutput(findings=findings, invented_count=invented, raw=raw)
 
 
