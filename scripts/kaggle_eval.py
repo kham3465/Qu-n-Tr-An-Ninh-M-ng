@@ -17,13 +17,13 @@ def _first_existing(paths: list[Path]) -> Path | None:
 
 
 def _find_gold(root: Path) -> Path:
-    found = _first_existing(
-        [
-            root / "data" / "labels" / "labels_v1.jsonl",
-            Path("/kaggle/working/labels_v1.jsonl"),
-            Path("/kaggle/working/slatriage/data/labels/labels_v1.jsonl"),
-        ]
-    )
+    searched = [
+        root / "data" / "labels" / "labels_v1.jsonl",
+        Path("/kaggle/working/labels_v1.jsonl"),
+        Path("/kaggle/working/slatriage/data/labels/labels_v1.jsonl"),
+        Path("/kaggle/working/results/labels_v1.jsonl"),
+    ]
+    found = _first_existing(searched)
     if found:
         return found
     inp = Path("/kaggle/input")
@@ -32,7 +32,7 @@ def _find_gold(root: Path) -> Path:
         if hits:
             return hits[0]
     raise FileNotFoundError(
-        "missing labels_v1.jsonl — upload it to /kaggle/working or as a dataset"
+        "missing labels_v1.jsonl — git pull mới hoặc upload file vào /kaggle/working"
     )
 
 

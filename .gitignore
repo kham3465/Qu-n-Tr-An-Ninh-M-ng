@@ -22,6 +22,8 @@ data/labels/*.jsonl
 !data/labels/.gitkeep
 !data/labels/schema.example.jsonl
 !data/labels/demo_labels.jsonl
+!data/labels/labels_v1.jsonl
+!data/labels/holdout_sources.json
 !data/sft/
 !data/sft/**/*.jsonl
 
