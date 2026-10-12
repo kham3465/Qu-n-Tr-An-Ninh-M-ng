@@ -10,6 +10,17 @@ from slatriage.llm import MockLLM, extract_json_object
 from slatriage.schema import Alert
 
 
+def test_hf_backends_share_one_pool():
+    from slatriage.llm import HuggingFaceLLM, get_hf_pool, release_hf_pools
+
+    release_hf_pools()
+    a = HuggingFaceLLM("unit-test/model", adapter_path="/tmp/R", adapter_name="R")
+    b = HuggingFaceLLM("unit-test/model", adapter_path="/tmp/A", adapter_name="A")
+    assert a._pool is b._pool
+    assert get_hf_pool("unit-test/model") is a._pool
+    release_hf_pools()
+
+
 def test_extract_json():
     assert extract_json_object('{"a":1}')["a"] == 1
     assert extract_json_object("```json\n{\"a\": 2}\n```")["a"] == 2

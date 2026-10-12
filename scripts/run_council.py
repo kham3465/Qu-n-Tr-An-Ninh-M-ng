@@ -49,17 +49,38 @@ def main() -> None:
     else:
         # One HF process loads several 7B copies if all adapters are set — needs >16GB.
         # On T4: train one role per session; infer E on a bigger GPU or sequentially later.
-        base = get_backend("hf", model_id=args.model, adapter_path=None)
-        g_llm = get_backend("hf", model_id=args.g_model, adapter_path=None) if args.config == "G" else base
+        # One 4-bit 7B + swap LoRA (T4 16GB). Config G is a separate 14B process.
+        base = get_backend("hf", model_id=args.model, adapter_path=None, adapter_name="base")
+        g_llm = (
+            get_backend("hf", model_id=args.g_model, adapter_path=None, adapter_name="base")
+            if args.config == "G"
+            else base
+        )
         experts = {
-            "R": get_backend("hf", model_id=args.model, adapter_path=str(args.adapter_r) if args.adapter_r else None),
-            "A": get_backend("hf", model_id=args.model, adapter_path=str(args.adapter_a) if args.adapter_a else None),
-            "C": get_backend("hf", model_id=args.model, adapter_path=str(args.adapter_c) if args.adapter_c else None),
+            "R": get_backend(
+                "hf",
+                model_id=args.model,
+                adapter_path=str(args.adapter_r) if args.adapter_r else None,
+                adapter_name="R",
+            ),
+            "A": get_backend(
+                "hf",
+                model_id=args.model,
+                adapter_path=str(args.adapter_a) if args.adapter_a else None,
+                adapter_name="A",
+            ),
+            "C": get_backend(
+                "hf",
+                model_id=args.model,
+                adapter_path=str(args.adapter_c) if args.adapter_c else None,
+                adapter_name="C",
+            ),
         }
         judge = get_backend(
             "hf",
             model_id=args.model,
             adapter_path=str(args.adapter_j) if args.adapter_j else None,
+            adapter_name="J",
         )
 
     by_src: dict[str, list[Alert]] = defaultdict(list)
