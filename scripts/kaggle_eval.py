@@ -151,6 +151,7 @@ def main() -> None:
         "--resume",
         "--configs",
         args.configs,
+        "--all-sources",
     ]
     if args.force:
         cmd.append("--force")

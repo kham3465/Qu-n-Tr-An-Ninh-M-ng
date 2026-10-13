@@ -39,11 +39,12 @@ def main() -> None:
     ap.add_argument("--adapter-j", type=Path, default=None)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--sol-path", default="")
+    ap.add_argument("--force", action="store_true", help="ignore existing pred and rerun every source")
     ap.add_argument(
         "--holdout",
         type=Path,
         default=None,
-        help="holdout_sources.json: run only on those files (the only set F1 is reported on)",
+        help="holdout_sources.json: run only on those files",
     )
     args = ap.parse_args()
 
@@ -102,8 +103,18 @@ def main() -> None:
     invent_total = 0
     parse_fail = 0
     per_source = []
+    done_src: set[str] = set()
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    if args.out.exists() and not args.force:
+        preds = [p for p in read_jsonl(args.out) if isinstance(p, dict)]
+        done_src = {str(p.get("source") or "") for p in preds if p.get("source")}
+        parse_fail = sum(1 for p in preds if p.get("reason") == "parse_fail")
+        print(f"RESUME {args.out.name} have={len(preds)} sources={len(done_src)}", flush=True)
     src_items = list(by_src.items())
     for i, (src, group) in enumerate(src_items, 1):
+        if src in done_src:
+            print(f"council {args.config} {i}/{len(src_items)} SKIP {src}", flush=True)
+            continue
         print(f"council {args.config} {i}/{len(src_items)} n={len(group)} {src}", flush=True)
         report = run_config(
             args.config,  # type: ignore[arg-type]
@@ -122,8 +133,9 @@ def main() -> None:
         if report.judge:
             invent_total += int(report.judge.invented_count or 0)
         per_source.append(report.to_dict())
+        write_jsonl(args.out, preds)
+        print(f"  saved preds={len(preds)}", flush=True)
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
     write_json(
         args.out.with_suffix(".report.json")
         if args.out.suffix == ".jsonl"

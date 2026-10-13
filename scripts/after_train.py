@@ -30,7 +30,12 @@ def main() -> None:
         "--holdout",
         type=Path,
         default=ROOT / "data" / "labels" / "holdout_sources.json",
-        help="council runs only on these files; F1 is reported only on them",
+        help="optional file filter; ignored with --all-sources",
+    )
+    ap.add_argument(
+        "--all-sources",
+        action="store_true",
+        help="run all Curated alerts (same 343/112 as pred_E). Use this for remaining B/C/D/E_noR/G.",
     )
     ap.add_argument("--skip-baseline-a", action="store_true")
     ap.add_argument("--run-hf", action="store_true", help="run B/C/D/E/G with adapters (needs GPU)")
@@ -41,13 +46,21 @@ def main() -> None:
     ap.add_argument(
         "--configs",
         default="",
-        help="comma list of HF jobs: B,C,D,E,E_noR,G. Empty = all. Paper-min: E,B",
+        help="comma list of HF jobs: B,C,D,E,E_noR,G. Empty = all. Remaining: B,C,D,E_noR,G",
     )
     args = ap.parse_args()
     want = {x.strip() for x in args.configs.split(",") if x.strip()}
 
+    def _n_preds(p: Path) -> int:
+        if not p.exists():
+            return 0
+        return sum(1 for line in p.open(encoding="utf-8") if line.strip())
+
+    def _complete(p: Path, min_n: int = 300) -> bool:
+        return _n_preds(p) >= min_n
+
     def _exists(p: Path) -> bool:
-        return p.exists() and p.stat().st_size > 2
+        return _complete(p)
 
     council = ROOT / "scripts" / "run_council.py"
     pred_a = args.pred_dir / "pred_A.jsonl"
@@ -60,8 +73,7 @@ def main() -> None:
                 str(args.gold),
                 "--config",
                 "A",
-                "--holdout",
-                str(args.holdout),
+                *([] if args.all_sources else ["--holdout", str(args.holdout)]),
                 "--backend",
                 "mock",
                 "--out",
@@ -114,12 +126,16 @@ def main() -> None:
             ("G", ["--g-model", args.g_model]),
         ]
         if want:
-            hf_jobs = [(c, e) for c, e in hf_jobs if c in want]
+            by = {c: e for c, e in hf_jobs}
+            hf_jobs = [(c, by[c]) for c in args.configs.split(",") if c.strip() in by]
         for cfg, extra in hf_jobs:
             out = args.pred_dir / f"pred_{cfg}.jsonl"
-            if args.resume and not args.force and _exists(out):
-                print(f"RESUME skip pred_{cfg}.jsonl")
+            n_have = _n_preds(out)
+            if args.resume and not args.force and _complete(out):
+                print(f"RESUME skip pred_{cfg}.jsonl n={n_have}")
                 continue
+            if n_have:
+                print(f"RESUME continue pred_{cfg}.jsonl n={n_have} (need >=300)")
             cfg_flag = "E" if cfg == "E_noR" else ("G" if cfg == "G" else cfg)
             cmd = [
                 sys.executable,
@@ -128,8 +144,7 @@ def main() -> None:
                 str(args.gold),
                 "--config",
                 cfg_flag,
-                "--holdout",
-                str(args.holdout),
+                *([] if args.all_sources else ["--holdout", str(args.holdout)]),
                 "--backend",
                 "hf",
                 "--model",
@@ -138,6 +153,8 @@ def main() -> None:
                 str(out),
                 *extra,
             ]
+            if args.force:
+                cmd.append("--force")
             rc = _run(cmd)
             if rc != 0:
                 print(f"WARN council {cfg} rc={rc}")

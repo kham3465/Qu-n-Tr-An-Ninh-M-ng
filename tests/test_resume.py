@@ -132,3 +132,66 @@ def test_train_cli_resume_skip(tmp_path):
     out = r.stdout + r.stderr
     assert r.returncode == 0, out
     assert "RESUME skip" in out or "already complete" in out
+
+
+def test_council_resumes_missing_sources(tmp_path):
+    import json
+    import subprocess
+    import sys
+
+    gold = tmp_path / "gold.jsonl"
+    gold.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "alert_id": "a1",
+                        "detector": "reentrancy-eth",
+                        "family": "R",
+                        "source": "one.sol",
+                        "label": "keep",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "alert_id": "a2",
+                        "detector": "reentrancy-eth",
+                        "family": "R",
+                        "source": "two.sol",
+                        "label": "keep",
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    pred = tmp_path / "pred_A.jsonl"
+    pred.write_text(
+        json.dumps({"alert_id": "a1", "decision": "keep", "source": "one.sol"}) + "\n",
+        encoding="utf-8",
+    )
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "run_council.py"),
+            "--alerts",
+            str(gold),
+            "--config",
+            "A",
+            "--backend",
+            "mock",
+            "--out",
+            str(pred),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    out = r.stdout + r.stderr
+    assert r.returncode == 0, out
+    assert "SKIP one.sol" in out
+    assert "two.sol" in out
+    lines = [ln for ln in pred.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    srcs = {json.loads(ln)["source"] for ln in lines}
+    assert srcs == {"one.sol", "two.sol"}
