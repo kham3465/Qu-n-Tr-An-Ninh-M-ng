@@ -113,10 +113,11 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--configs",
-        default="E,B",
-        help="HF configs to run. Default E,B fits a 3h Kaggle quota. All: B,C,D,E,E_noR,G",
+        default="remaining",
+        help="HF configs. remaining = B,C,D,E_noR,G (skip E if already full). All: B,C,D,E,E_noR,G",
     )
-    ap.add_argument("--force", action="store_true", help="re-run even if pred_B.jsonl already exists")
+    ap.add_argument("--force", action="store_true", help="re-run from scratch even if pred exists")
+    ap.add_argument("--holdout-only", action="store_true", help="only 34 hold-out files (not the same set as pred_E)")
     args = ap.parse_args()
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
     os.environ["ACCELERATE_MIXED_PRECISION"] = "no"
@@ -149,12 +150,14 @@ def main() -> None:
         str(gold),
         "--run-hf",
         "--resume",
+        "--skip-baseline-a",
         "--configs",
         args.configs,
-        "--all-sources",
     ]
     if args.force:
         cmd.append("--force")
+    if args.holdout_only:
+        cmd.append("--holdout-only")
     rc = subprocess.call(cmd)
     if rc != 0:
         sys.exit(rc)

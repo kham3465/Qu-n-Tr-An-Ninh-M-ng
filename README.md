@@ -159,7 +159,7 @@ Bản trước từng chấm F1 trên toàn bộ `labels_v1` trong khi mẫu h�
 
 | Vấn đề | Cách xử lý |
 | --- | --- |
-| Train và test trùng file | `data/labels/holdout_sources.json` (34/112 file, seed 0) bị **loại khỏi mọi SFT** (`export_sft_jsonl`, `export_judge_sft`, `merge_sft_jsonl`, `scripts/merge_sft.py`, `scripts/prepare_curated.py`). Hội đồng chỉ chạy trên các file này (`run_council.py --holdout`, mặc định bật trong `after_train.py`). Báo cáo chỉ tính F1 trên hold-out. |
+| Train và test trùng file | `data/labels/holdout_sources.json` (34/112 file, seed 0) bị **loại khỏi mọi SFT**. Hội đồng mặc định chạy **cả 112 file** (343 alert, cùng tập `pred_E`). Báo cáo vẫn **chỉ tính F1 trên hold-out**. `--holdout-only` nếu chỉ muốn 34 file. Colab phần còn lại: `python scripts/colab_eval_rest.py` (B,C,D,E_noR,G; resume từng file; không train lại). |
 | Judge học bằng đáp án | Mẫu Judge dùng đúng prompt lúc chạy thật (`judge_system` / `judge_user`): đầu vào là **quyết định chuyên gia giả lập** (nhãn thật, lật ngẫu nhiên 10%, seed cố định), không có nhãn thật. Đích là những alert chuyên gia đã keep, `invented_count=0`. Judge học đúng một luật: chỉ giữ cái chuyên gia giữ, không bịa. Mẫu SolidiFI cũ được chuyển bằng `rewrite_legacy_judge_sft` (không còn nhãn gốc, nên alert thiếu dòng nếu trước đó là drop). |
 | Alert bị model bỏ sót | `score_aligned` đi theo **gold**: alert không có dự đoán tính là `drop` và ghi vào `n_missing`. Không còn lợi từ việc im lặng. |
 | JSON hỏng bị giấu thành `drop` | Đếm riêng `parse_fail` (trong metric, `*.report.json` và bảng báo cáo). |

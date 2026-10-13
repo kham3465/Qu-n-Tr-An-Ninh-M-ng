@@ -39,7 +39,7 @@ def main() -> None:
 
     args.pred_dir.mkdir(parents=True, exist_ok=True)
     print(f"REMAINING configs={args.configs} gold={args.gold} adapters={args.adapters} pred={args.pred_dir}", flush=True)
-    print("no train / no A / no E — resume incomplete pred_*.jsonl by source", flush=True)
+    print("no train / no A / no E — full 343/112 — resume incomplete pred_*.jsonl by source", flush=True)
 
     cmd = [
         sys.executable,
@@ -52,7 +52,6 @@ def main() -> None:
         str(args.gold),
         "--run-hf",
         "--resume",
-        "--all-sources",
         "--skip-baseline-a",
         "--configs",
         args.configs,
@@ -62,7 +61,7 @@ def main() -> None:
     rc = subprocess.call(cmd)
     if rc != 0:
         sys.exit(rc)
-    print("REMAINING DONE — download pred_B/C/D/E_noR.jsonl (+ pred_G if present)", flush=True)
+    print("REMAINING DONE — each of pred_B/C/D/E_noR.jsonl must be n=343 sources=112", flush=True)
 
 
 if __name__ == "__main__":

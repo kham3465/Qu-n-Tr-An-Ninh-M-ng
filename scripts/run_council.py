@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -25,6 +26,51 @@ def load_alerts(path: Path) -> list[Alert]:
     return [Alert.from_dict(r) for r in rows]
 
 
+def report_path_for(out: Path) -> Path:
+    return out.with_suffix(".report.json") if out.suffix == ".jsonl" else Path(str(out) + ".report.json")
+
+
+def load_resume(out: Path) -> tuple[list[dict], set[str], list[dict], int]:
+    preds = read_jsonl(out) if out.exists() else []
+    done = {str(p.get("source")) for p in preds if p.get("source")}
+    per_source: list[dict] = []
+    invent = 0
+    rp = report_path_for(out)
+    if rp.exists():
+        try:
+            old = json.loads(rp.read_text(encoding="utf-8"))
+            per_source = list(old.get("per_source") or [])
+            invent = int(old.get("invented_count") or 0)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+    return preds, done, per_source, invent
+
+
+def flush_progress(
+    out: Path,
+    preds: list[dict],
+    *,
+    config: str,
+    invent_total: int,
+    per_source: list[dict],
+    n_sources: int,
+) -> None:
+    parse_fail = sum(1 for p in preds if p.get("reason") == "parse_fail")
+    write_jsonl(out, preds)
+    write_json(
+        report_path_for(out),
+        {
+            "config": config,
+            "invented_count": invent_total,
+            "parse_fail": parse_fail,
+            "judge": {"invented_count": invent_total},
+            "n_sources": n_sources,
+            "n_preds": len(preds),
+            "per_source": per_source,
+        },
+    )
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="SlaTriage council runner")
     ap.add_argument("--alerts", type=Path, required=True, help="JSONL alerts or labels")
@@ -39,12 +85,16 @@ def main() -> None:
     ap.add_argument("--adapter-j", type=Path, default=None)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--sol-path", default="")
-    ap.add_argument("--force", action="store_true", help="ignore existing pred and rerun every source")
     ap.add_argument(
         "--holdout",
         type=Path,
         default=None,
-        help="holdout_sources.json: run only on those files",
+        help="holdout_sources.json: run only on those files (report F1 is still hold-out even without this)",
+    )
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="skip sources already in --out and flush after each file (Colab/Kaggle safe)",
     )
     args = ap.parse_args()
 
@@ -99,23 +149,23 @@ def main() -> None:
     for a in alerts:
         by_src[a.source or args.sol_path or "_"].append(a)
 
-    preds = []
-    invent_total = 0
-    parse_fail = 0
-    per_source = []
-    done_src: set[str] = set()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    if args.out.exists() and not args.force:
-        preds = [p for p in read_jsonl(args.out) if isinstance(p, dict)]
-        done_src = {str(p.get("source") or "") for p in preds if p.get("source")}
-        parse_fail = sum(1 for p in preds if p.get("reason") == "parse_fail")
-        print(f"RESUME {args.out.name} have={len(preds)} sources={len(done_src)}", flush=True)
+    preds: list[dict] = []
+    invent_total = 0
+    per_source: list[dict] = []
+    done: set[str] = set()
+    if args.resume:
+        preds, done, per_source, invent_total = load_resume(args.out)
+        if done:
+            print(f"RESUME {len(preds)} preds from {len(done)} sources in {args.out.name}", flush=True)
+
     src_items = list(by_src.items())
+    n_total = len(src_items)
     for i, (src, group) in enumerate(src_items, 1):
-        if src in done_src:
-            print(f"council {args.config} {i}/{len(src_items)} SKIP {src}", flush=True)
+        if src in done:
+            print(f"council {args.config} {i}/{n_total} SKIP {src}", flush=True)
             continue
-        print(f"council {args.config} {i}/{len(src_items)} n={len(group)} {src}", flush=True)
+        print(f"council {args.config} {i}/{n_total} n={len(group)} {src}", flush=True)
         report = run_config(
             args.config,  # type: ignore[arg-type]
             group,
@@ -128,29 +178,36 @@ def main() -> None:
         )
         for p in report.predictions:
             p.setdefault("source", src)
-            parse_fail += p.get("reason") == "parse_fail"
             preds.append(p)
         if report.judge:
             invent_total += int(report.judge.invented_count or 0)
         per_source.append(report.to_dict())
-        write_jsonl(args.out, preds)
-        print(f"  saved preds={len(preds)}", flush=True)
+        flush_progress(
+            args.out,
+            preds,
+            config=args.config,
+            invent_total=invent_total,
+            per_source=per_source,
+            n_sources=n_total,
+        )
+        print(
+            f"  saved {len(preds)}/{sum(len(g) for _, g in src_items)} preds sources_done={len({p.get('source') for p in preds})}/{n_total}",
+            flush=True,
+        )
 
-    write_json(
-        args.out.with_suffix(".report.json")
-        if args.out.suffix == ".jsonl"
-        else Path(str(args.out) + ".report.json"),
-        {
-            "config": args.config,
-            "invented_count": invent_total,
-            "parse_fail": parse_fail,
-            "judge": {"invented_count": invent_total},
-            "n_sources": len(by_src),
-            "per_source": per_source,
-        },
+    flush_progress(
+        args.out,
+        preds,
+        config=args.config,
+        invent_total=invent_total,
+        per_source=per_source,
+        n_sources=n_total,
     )
-    n = write_jsonl(args.out, preds)
-    print(f"config={args.config} predictions={n} invented={invent_total} parse_fail={parse_fail} sources={len(by_src)} out={args.out.name}")
+    parse_fail = sum(1 for p in preds if p.get("reason") == "parse_fail")
+    n = len(preds)
+    print(
+        f"config={args.config} predictions={n} invented={invent_total} parse_fail={parse_fail} sources={len({p.get('source') for p in preds})}/{n_total} out={args.out.name}"
+    )
 
 
 if __name__ == "__main__":

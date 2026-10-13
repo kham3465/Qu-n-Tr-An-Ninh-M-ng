@@ -103,6 +103,69 @@ def test_holdout_stable():
     assert 0 < len(a) < len({r.get("source") for r in labels})
 
 
+def test_council_resume_skips_done_source(tmp_path):
+    import subprocess
+    import sys
+
+    from slatriage.io_utils import read_jsonl, write_jsonl
+
+    gold = ROOT / "data" / "labels" / "demo_labels.jsonl"
+    out = tmp_path / "pred_B.jsonl"
+    rows = read_jsonl(gold)
+    write_jsonl(
+        out,
+        [
+            {
+                "alert_id": rows[0]["alert_id"],
+                "decision": "keep",
+                "source": rows[0]["source"],
+                "reason": "seed",
+            }
+        ],
+    )
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "run_council.py"),
+            "--alerts",
+            str(gold),
+            "--config",
+            "B",
+            "--backend",
+            "mock",
+            "--out",
+            str(out),
+            "--resume",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    text = r.stdout + r.stderr
+    assert r.returncode == 0, text
+    assert f"SKIP {rows[0]['source']}" in text
+    got = read_jsonl(out)
+    srcs = [p.get("source") for p in got]
+    assert srcs.count(rows[0]["source"]) == 1
+    assert len(got) == len(rows)
+
+
+def test_after_train_pred_complete(tmp_path):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("after_train", ROOT / "scripts" / "after_train.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    p = tmp_path / "pred_B.jsonl"
+    p.write_text("\n".join("{}" for _ in range(120)) + "\n", encoding="utf-8")
+    assert mod.pred_n(p) == 120
+    assert mod.pred_complete(p, holdout_only=True) is True
+    assert mod.pred_complete(p, holdout_only=False) is False
+    p.write_text("\n".join("{}" for _ in range(343)) + "\n", encoding="utf-8")
+    assert mod.pred_complete(p, holdout_only=False) is True
+
+
 def test_train_cli_resume_skip(tmp_path):
     import subprocess
     import sys
@@ -132,66 +195,3 @@ def test_train_cli_resume_skip(tmp_path):
     out = r.stdout + r.stderr
     assert r.returncode == 0, out
     assert "RESUME skip" in out or "already complete" in out
-
-
-def test_council_resumes_missing_sources(tmp_path):
-    import json
-    import subprocess
-    import sys
-
-    gold = tmp_path / "gold.jsonl"
-    gold.write_text(
-        "\n".join(
-            [
-                json.dumps(
-                    {
-                        "alert_id": "a1",
-                        "detector": "reentrancy-eth",
-                        "family": "R",
-                        "source": "one.sol",
-                        "label": "keep",
-                    }
-                ),
-                json.dumps(
-                    {
-                        "alert_id": "a2",
-                        "detector": "reentrancy-eth",
-                        "family": "R",
-                        "source": "two.sol",
-                        "label": "keep",
-                    }
-                ),
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    pred = tmp_path / "pred_A.jsonl"
-    pred.write_text(
-        json.dumps({"alert_id": "a1", "decision": "keep", "source": "one.sol"}) + "\n",
-        encoding="utf-8",
-    )
-    r = subprocess.run(
-        [
-            sys.executable,
-            str(ROOT / "scripts" / "run_council.py"),
-            "--alerts",
-            str(gold),
-            "--config",
-            "A",
-            "--backend",
-            "mock",
-            "--out",
-            str(pred),
-        ],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    out = r.stdout + r.stderr
-    assert r.returncode == 0, out
-    assert "SKIP one.sol" in out
-    assert "two.sol" in out
-    lines = [ln for ln in pred.read_text(encoding="utf-8").splitlines() if ln.strip()]
-    srcs = {json.loads(ln)["source"] for ln in lines}
-    assert srcs == {"one.sol", "two.sol"}
