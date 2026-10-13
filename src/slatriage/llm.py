@@ -173,7 +173,7 @@ class HFModelPool:
         mid = (self.model_id or "").lower()
         if "14b" in mid or "13b" in mid:
             return 1024
-        return 1536
+        return 2048
 
     def generate(self, system: str, user: str, *, temperature: float = 0.0, max_new_tokens: int = 256) -> str:
         assert self._tokenizer is not None and self._model is not None

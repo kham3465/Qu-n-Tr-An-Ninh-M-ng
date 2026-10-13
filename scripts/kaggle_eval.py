@@ -116,6 +116,7 @@ def main() -> None:
         default="E,B",
         help="HF configs to run. Default E,B fits a 3h Kaggle quota. All: B,C,D,E,E_noR,G",
     )
+    ap.add_argument("--force", action="store_true", help="re-run even if pred_B.jsonl already exists")
     args = ap.parse_args()
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
     os.environ["ACCELERATE_MIXED_PRECISION"] = "no"
@@ -151,6 +152,8 @@ def main() -> None:
         "--configs",
         args.configs,
     ]
+    if args.force:
+        cmd.append("--force")
     rc = subprocess.call(cmd)
     if rc != 0:
         sys.exit(rc)

@@ -54,7 +54,7 @@ class ExpertAgent:
         )
 
 
-INFER_ALERT_CHUNK = 4
+INFER_ALERT_CHUNK = 1
 INFER_JUDGE_CHUNK = 6
 
 

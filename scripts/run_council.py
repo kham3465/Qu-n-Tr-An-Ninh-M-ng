@@ -102,7 +102,9 @@ def main() -> None:
     invent_total = 0
     parse_fail = 0
     per_source = []
-    for src, group in by_src.items():
+    src_items = list(by_src.items())
+    for i, (src, group) in enumerate(src_items, 1):
+        print(f"council {args.config} {i}/{len(src_items)} n={len(group)} {src}", flush=True)
         report = run_config(
             args.config,  # type: ignore[arg-type]
             group,
