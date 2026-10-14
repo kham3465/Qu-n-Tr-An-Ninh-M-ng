@@ -27,9 +27,20 @@ data/labels/*.jsonl
 !data/sft/
 !data/sft/**/*.jsonl
 
-# Reports tạm
+# Reports nặng (*.report.json ~2MB) không lên git
 reports/**
 !reports/.gitkeep
+!reports/BAO-CAO-CHI-SO.md
+!reports/paper_stats.json
+!reports/pred_A.jsonl
+!reports/pred_B.jsonl
+!reports/pred_C.jsonl
+!reports/pred_D.jsonl
+!reports/pred_E.jsonl
+!reports/pred_E_noR.jsonl
+!reports/figures/
+!reports/figures/*.png
+!reports/figures/manifest.json
 
 # Env / IDE
 .env

@@ -1,0 +1,43 @@
+{
+  "written": {
+    "fig01_labels_curated": "fig01_labels_curated.png",
+    "fig02_labels_solidifi": "fig02_labels_solidifi.png",
+    "fig03_sft_train": "fig03_sft_train.png",
+    "fig04_keep_detectors": "fig04_keep_detectors.png",
+    "fig05_coverage": "fig05_coverage.png",
+    "fig06_prf_configs": "fig06_prf_configs.png",
+    "fig07_f1_by_family": "fig07_f1_by_family.png",
+    "fig08_invent": "fig08_invent.png",
+    "fig09_gain": "fig09_gain.png",
+    "fig10_ablation": "fig10_ablation.png",
+    "fig11_train_loss": "fig11_train_loss.png",
+    "fig12_tp_fp_fn": "fig12_tp_fp_fn.png",
+    "fig13_keep_rate": "fig13_keep_rate.png",
+    "fig14_confusion": "fig14_confusion.png",
+    "fig15_absent_share": "fig15_absent_share.png",
+    "fig16_holdout": "fig16_holdout.png",
+    "fig17_eval_loss": "fig17_eval_loss.png",
+    "fig18_holdout_f1": "fig18_holdout_f1.png"
+  },
+  "pending": [],
+  "need": {
+    "fig01_labels_curated": "labels_v1",
+    "fig02_labels_solidifi": "labels_solidifi",
+    "fig03_sft_train": "data/sft/combined",
+    "fig04_keep_detectors": "labels_v1",
+    "fig05_coverage": "labels_v1",
+    "fig06_prf_configs": "pred_A..G.jsonl after council",
+    "fig07_f1_by_family": "pred_*.jsonl",
+    "fig08_invent": "pred_C/D/E.report.json",
+    "fig09_gain": "pred_B + pred_E",
+    "fig10_ablation": "pred_E + pred_E_noR",
+    "fig11_train_loss": "adapters/*/train_meta.json",
+    "fig12_tp_fp_fn": "pred_*.jsonl",
+    "fig13_keep_rate": "labels curated+solidifi",
+    "fig14_confusion": "pred_*.jsonl",
+    "fig15_absent_share": "coverage matrix",
+    "fig16_holdout": "holdout_sources.json",
+    "fig17_eval_loss": "adapters/*/train_meta.json eval_loss",
+    "fig18_holdout_f1": "pred + hold-out files"
+  }
+}

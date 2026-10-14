@@ -6,6 +6,65 @@ Không viết detector mới. Không săn lỗ từ trang trắng kiểu LLM-Sma
 
 Hội đồng bốn vai: ba chuyên gia theo **họ lỗ** R / A / C, plus **Judge** (gộp và cấm bịa finding).
 
+Repo: https://github.com/kham3465/Qu-n-Tr-An-Ninh-M-ng.git
+
+---
+
+## Cho nhóm — lấy gì, ở đâu
+
+**Git (code + pred nhẹ + bài báo + figure):** clone repo. Adapter LoRA (~80 MB) và file `*.report.json` **không** lên git.
+
+| Thứ | Ở đâu |
+| --- | --- |
+| Code train / eval / nhãn / SFT | repo này (`scripts/`, `notebooks/`, `data/`) |
+| Bài báo khoa học | [`docs/SlaTriage_Bao_Khoa_Hoc.md`](docs/SlaTriage_Bao_Khoa_Hoc.md) |
+| Pred A/B/C/D/E/E_noR + `paper_stats.json` + figure | `reports/` trong repo **và** Drive bên dưới |
+| LoRA R/A/C/J (`slatriage_adapters.zip`) | Drive — không commit `.safetensors` |
+| Pred + report đầy đủ (kể cả `.report.json`) | [Drive `slatriage_reports`](https://drive.google.com/drive/folders/1hIDVse448FkuoESlLDdXnZsKCVBgke-v?usp=drive_link) |
+
+**Drive (Share cho email nhóm, quyền Viewer/Editor):**
+
+1. Folder pred / report: https://drive.google.com/drive/folders/1hIDVse448FkuoESlLDdXnZsKCVBgke-v?usp=drive_link  
+2. Zip adapter: upload file `slatriage_adapters.zip` (~80 MB, đủ R/A/C/J) **vào folder Drive đó** nếu chưa có, rồi Share cho nhóm. File gốc trên máy train: `C:\Users\Admin\Downloads\slatriage_adapters.zip`.
+
+**F1 chính (hold-out 34 file / 108 alert keep+drop) — số đã chấm, không bịa:**
+
+| Config | F1 hold-out | F1 full 300 |
+| --- | ---: | ---: |
+| A Slither raw | 0.490 | 0.540 |
+| B 7B 1 prompt | 0.515 | 0.560 |
+| C 4 vai, chưa LoRA | 0.613 | 0.629 |
+| D 3 LoRA, Judge chưa học | 0.757 | 0.800 |
+| **E đủ LoRA+J** | **0.861** | **0.882** |
+| E_noR tắt chuyên gia R | 0.831 | 0.786 |
+
+G (14B) đã chạy nhưng `parse_fail` gần hết — **không dùng cho F1**. Chi tiết: `reports/BAO-CAO-CHI-SO.md`.
+
+### Train lại (GPU T4, không bắt buộc — adapter đã có trên Drive)
+
+```text
+git clone https://github.com/kham3465/Qu-n-Tr-An-Ninh-M-ng.git
+cd Qu-n-Tr-An-Ninh-M-ng
+pip install -r requirements-train.txt
+python scripts/kaggle_train.py
+# hoặc notebooks/kaggle_train.ipynb trên Kaggle T4
+```
+
+`--resume` mặc định: vai đã có `train_meta.json` + `adapter_config.json` thì bỏ qua.
+
+### Chỉ dựng báo cáo (CPU, đã có pred trong `reports/`)
+
+```text
+pip install -r requirements.txt
+python -c "from slatriage.report import write_report; write_report()"
+```
+
+### Eval hội đồng (GPU, chỉ khi muốn chạy lại)
+
+Unzip adapter vào `adapters/R|A|C|J` rồi:
+
+`python scripts/after_train.py --run-hf --resume --configs E,B --skip-baseline-a`
+
 ---
 
 ## 1. Bài toán
@@ -102,7 +161,7 @@ Quy trình đã làm xong tới hết nhãn:
 6. Dựng ma trận coverage từ nhãn.
 7. Thêm SolidiFI (bug bơm, chỉ họ R/A/C) làm **tập học phụ** → `labels_solidifi.jsonl` + `data/sft/combined`. F1 chính vẫn Curated.
 
-Chưa làm: học bốn adapter trên `data/sft/combined`, chạy A–E–G, đo **trên hold-out**, viết kết luận.
+**Đã xong:** học R/A/C/J; pred A/B/C/D/E/E_noR đủ 343/112; F1 hold-out ở mục *Cho nhóm*; bài báo `docs/SlaTriage_Bao_Khoa_Hoc.md`. G không vào bảng F1.
 
 ---
 
@@ -122,34 +181,9 @@ Tập học phụ SolidiFI (200 file RAC, bug bơm, **không** vào F1 chính): 
 
 ---
 
-## 5. Bước tiếp theo
+## 5. Tái lập (nếu cần chạy lại)
 
-Làm theo thứ tự; bước sau cần output bước trước.
-
-**Bước 1 — Học bốn adapter (đang chờ)**  
-Học R, rồi A, rồi C, rồi J trên `data/sft/combined` (Curated + SolidiFI phụ). F1 / eval sau train chỉ trên **file hold-out** của `labels_v1` (mục 6). Cùng một model nền, mỗi vai một LoRA. Xong bước này mới có hệ E.
-
-Kaggle: GPU T4 + Internet, clone git (không zip):
-
-`git clone https://github.com/kham3465/Qu-n-Tr-An-Ninh-M-ng.git`  
-rồi `notebooks/kaggle_train.ipynb` hoặc `python scripts/kaggle_train.py`. `--resume` mặc định.
-
-**Bước 2 — Chạy đủ sáu cấu hình trên cùng tập alert**  
-A (không model), B, C, D, E, G. Mỗi cấu hình một file dự đoán: `alert_id`, `source`, `decision`. Judge ghi `invented_count`.
-
-**Bước 3 — Đo + biểu đồ**  
-Một lệnh sau khi có adapter (và pred nếu đã chạy hội đồng):
-
-`python scripts/train_lora.py --all --do-train` (mặc định `--resume`: bỏ vai đã xong, nối checkpoint).  
-`python scripts/after_train.py` — skip `pred_*.jsonl` đã có; `--force` để chạy lại.  
-Có GPU và muốn tự chạy B–G + ablation: thêm `--run-hf`.
-
-Ra `reports/BAO-CAO-CHI-SO.md`, `paper_stats.json`, `reports/figures/fig01…fig12.png`: nhãn, SFT, coverage, P/R/F1, F1 theo họ, invent, gain E vs B, ablation tắt LoRA-R, loss train, TP/FP/FN. F1 chính chỉ trên 34 file hold-out (120 alert), kèm khoảng tin cậy 95% (bootstrap).
-
-**Bước 4 — Chỉ khi 1–3 xong**  
-Thêm tập ngoài Curated (110 ca SmartAudit, Web3Bugs biên dịch được) nếu đủ mẫu; dưới 20 file thì ghi “chưa đủ”, không ép RQ. Viết báo đúng khung *triage cảnh báo*, không viết thành “hệ audit đa tác nhân như SmartAudit”.
-
-Câu bảo vệ ngắn: *Ba họ vì protocol (tín hiệu + nhãn + dị thể FP + mẫu) trên Slither×Curated chỉ R/A/C đủ. Keep/drop là phán trên alert, không trên detector. Sót được kê trong ô ABSENT, không bịa lỗ.*
+Train / eval / CPU report: xem mục *Cho nhóm* ở đầu README. Câu bảo vệ ngắn: *Ba họ vì protocol trên Slither×Curated chỉ R/A/C đủ. Keep/drop là phán trên alert. Sót kê ở ô ABSENT, không bịa lỗ.*
 
 ---
 
@@ -166,6 +200,6 @@ Bản trước từng chấm F1 trên toàn bộ `labels_v1` trong khi mẫu h�
 | F1 dao động vì mẫu ít | Mỗi F1 kèm khoảng tin cậy 95% bootstrap (`f1_ci`). Họ A, C trên hold-out rất ít alert, nên đọc kèm khoảng này. |
 | Prompt dài bị cắt cuối | Cắt từ **bên trái** và in cảnh báo mỗi lần cắt (`HFModelPool.n_truncated`). Danh sách dòng trong prompt Judge giới hạn 4 dòng đầu. |
 
-Còn hạn chế cần ghi vào báo: hold-out chỉ 120 alert (họ A, C rất mỏng); LoRA-C vẫn lệch keep vì thiếu drop; SolidiFI là bug bơm nên phân bố khác Curated; mẫu Judge dùng chuyên gia giả lập chứ chưa phải đầu ra của LoRA R/A/C thật.
+Còn hạn chế cần ghi vào báo: hold-out chỉ 108 alert keep/drop (họ A, C rất mỏng); LoRA-C vẫn lệch keep vì thiếu drop; SolidiFI là bug bơm nên phân bố khác Curated; mẫu Judge dùng chuyên gia giả lập chứ chưa phải đầu ra của LoRA R/A/C thật.
 
 Kiểm thử: `pip install -r requirements.txt && python -m pytest -q`. `tests/test_leakage.py` giữ các bất biến ở bảng trên (SFT không chứa file hold-out, prompt Judge không chứa nhãn, alert bỏ sót bị phạt).

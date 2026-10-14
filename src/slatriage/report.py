@@ -162,6 +162,7 @@ def build_payload(
     gold_hold = filter_by_sources(labels, hold_set)
     evals, invent = evaluate_preds(gold_hold, pred_files, only_sources=hold_set)
     eval_holdout = evals
+    eval_full, _ = evaluate_preds(labels, pred_files, only_sources=None)
     gain = None
     if "E" in evals and "B" in evals and "f1" in evals["E"] and "f1" in evals["B"]:
         gain = {
@@ -190,6 +191,7 @@ def build_payload(
         },
         "coverage": cov,
         "eval": evals,
+        "eval_full": eval_full,
         "eval_scope": "holdout",
         "invented_count_by_config": invent,
         "relative_gain_E_vs_B": gain,
@@ -287,7 +289,19 @@ def write_markdown(payload: dict[str, Any], figures: dict[str, str | None], out_
             lines.append(f"- {k}: {v}")
     gain = payload.get("relative_gain_E_vs_B")
     if gain:
-        lines += ["", f"Gain E vs B: P={gain.get('precision')} F1={gain.get('f1')}", ""]
+        lines += ["", f"Gain E vs B (hold-out): P={gain.get('precision')} F1={gain.get('f1')}", ""]
+    full = payload.get("eval_full") or {}
+    if full:
+        lines += [
+            "",
+            "## 3b. Toan tap labels_v1 (300 keep/drop; co file nam trong SFT — khong dung lam F1 chinh)",
+            "",
+            "| config | precision | recall | f1 | n |",
+            "| --- | ---: | ---: | ---: | ---: |",
+        ]
+        for name, m in full.items():
+            if isinstance(m, dict):
+                lines.append(_md_prf(name, m))
     lines += ["", "## 4. Bieu do", ""]
     missing = []
     for key in FIGURES:
