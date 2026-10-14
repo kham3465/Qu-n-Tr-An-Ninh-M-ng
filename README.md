@@ -4,64 +4,54 @@ Phân xử cảnh báo Slither: mỗi **alert** quyết **keep** (giữ, lỗ th
 
 Không viết detector mới. Không săn lỗ từ trang trắng kiểu LLM-SmartAudit. Đầu vào là JSON Slither; đầu ra là quyết định trên từng cảnh báo đã có.
 
-Hội đồng bốn vai: ba chuyên gia theo **họ lỗ** R / A / C, plus **Judge** (gộp và cấm bịa finding).
+Hội đồng bốn vai: ba chuyên gia theo **họ lỗ** R / A / C và một **Judge** (gộp quyết định, không invent finding).
 
-Repo: https://github.com/kham3465/Qu-n-Tr-An-Ninh-M-ng.git
+Mã nguồn: https://github.com/kham3465/Qu-n-Tr-An-Ninh-M-ng.git
 
 ---
 
-## Cho nhóm — lấy gì, ở đâu
+## Tài nguyên và kết quả thực nghiệm
 
-**Git (code + pred nhẹ + bài báo + figure):** clone repo. Adapter LoRA (~80 MB) và file `*.report.json` **không** lên git.
+Kho Git chứa mã huấn luyện và đánh giá (`scripts/`, `notebooks/`), nhãn, mẫu SFT, bản thảo bài báo (`docs/SlaTriage_Bao_Khoa_Hoc.md`), các file dự đoán `pred_*.jsonl`, `reports/paper_stats.json` và bộ hình `reports/figures/`. Trọng số LoRA (định dạng `.safetensors`) và nhật ký hội đồng `*.report.json` không được đưa vào Git do dung lượng.
 
-| Thứ | Ở đâu |
-| --- | --- |
-| Code train / eval / nhãn / SFT | repo này (`scripts/`, `notebooks/`, `data/`) |
-| Bài báo khoa học | [`docs/SlaTriage_Bao_Khoa_Hoc.md`](docs/SlaTriage_Bao_Khoa_Hoc.md) |
-| Pred A/B/C/D/E/E_noR + `paper_stats.json` + figure | `reports/` trong repo **và** Drive bên dưới |
-| LoRA R/A/C/J (`slatriage_adapters.zip`) | Drive — không commit `.safetensors` |
-| Pred + report đầy đủ (kể cả `.report.json`) | [Drive `slatriage_reports`](https://drive.google.com/drive/folders/1hIDVse448FkuoESlLDdXnZsKCVBgke-v?usp=drive_link) |
+Tập tin bổ sung được lưu trên Google Drive, thư mục `slatriage_reports`:
 
-**Drive (Share cho email nhóm, quyền Viewer/Editor):**
+https://drive.google.com/drive/folders/1hIDVse448FkuoESlLDdXnZsKCVBgke-v?usp=drive_link
 
-1. Folder pred / report: https://drive.google.com/drive/folders/1hIDVse448FkuoESlLDdXnZsKCVBgke-v?usp=drive_link  
-2. Zip adapter: upload file `slatriage_adapters.zip` (~80 MB, đủ R/A/C/J) **vào folder Drive đó** nếu chưa có, rồi Share cho nhóm. File gốc trên máy train: `C:\Users\Admin\Downloads\slatriage_adapters.zip`.
+Thư mục này gồm các file `pred_*.jsonl`, `*.report.json` và, khi đã tải lên, gói `slatriage_adapters.zip` (bốn adapter R, A, C, J; khoảng 80 MB). Quyền truy cập: chia sẻ cho thành viên nhóm (xem hoặc chỉnh sửa).
 
-**F1 chính (hold-out 34 file / 108 alert keep+drop) — số đã chấm, không bịa:**
+Chỉ số F1 chính được tính trên 34 file hold-out (108 cảnh báo keep/drop), không thuộc tập SFT. Bảng dưới đây lấy từ `reports/BAO-CAO-CHI-SO.md`.
 
-| Config | F1 hold-out | F1 full 300 |
-| --- | ---: | ---: |
-| A Slither raw | 0.490 | 0.540 |
-| B 7B 1 prompt | 0.515 | 0.560 |
-| C 4 vai, chưa LoRA | 0.613 | 0.629 |
-| D 3 LoRA, Judge chưa học | 0.757 | 0.800 |
-| **E đủ LoRA+J** | **0.861** | **0.882** |
-| E_noR tắt chuyên gia R | 0.831 | 0.786 |
+| Cấu hình | Mô tả | F1 hold-out | F1 toàn tập (300) |
+| --- | --- | ---: | ---: |
+| A | Slither thô, mọi alert in-scope được gán keep | 0,490 | 0,540 |
+| B | Qwen2.5-Coder-7B, một prompt, chưa LoRA | 0,515 | 0,560 |
+| C | Bốn vai, chỉ prompt | 0,613 | 0,629 |
+| D | Ba LoRA chuyên gia, Judge chưa huấn luyện | 0,757 | 0,800 |
+| E | Ba LoRA và Judge đã huấn luyện | 0,861 | 0,882 |
+| E\_noR | Như E, không dùng chuyên gia R | 0,831 | 0,786 |
 
-G (14B) đã chạy nhưng `parse_fail` gần hết — **không dùng cho F1**. Chi tiết: `reports/BAO-CAO-CHI-SO.md`.
+Cấu hình G (DeepSeek-R1-Distill-Qwen-14B, một prompt) đã được chạy trên 112 file nhưng tỷ lệ `parse_fail` gần toàn bộ; kết quả này không đưa vào bảng F1.
 
-### Train lại (GPU T4, không bắt buộc — adapter đã có trên Drive)
+Huấn luyện lại (GPU T4), nếu cần:
 
 ```text
 git clone https://github.com/kham3465/Qu-n-Tr-An-Ninh-M-ng.git
 cd Qu-n-Tr-An-Ninh-M-ng
 pip install -r requirements-train.txt
 python scripts/kaggle_train.py
-# hoặc notebooks/kaggle_train.ipynb trên Kaggle T4
 ```
 
-`--resume` mặc định: vai đã có `train_meta.json` + `adapter_config.json` thì bỏ qua.
+Cờ `--resume` bỏ qua vai đã có `adapter_config.json` và `train_meta.json`.
 
-### Chỉ dựng báo cáo (CPU, đã có pred trong `reports/`)
+Dựng lại bảng và hình trên CPU khi đã có `reports/pred_*.jsonl`:
 
 ```text
 pip install -r requirements.txt
 python -c "from slatriage.report import write_report; write_report()"
 ```
 
-### Eval hội đồng (GPU, chỉ khi muốn chạy lại)
-
-Unzip adapter vào `adapters/R|A|C|J` rồi:
+Suy luận hội đồng trên GPU: giải nén `slatriage_adapters.zip` vào `adapters/{R,A,C,J}` rồi chạy
 
 `python scripts/after_train.py --run-hf --resume --configs E,B --skip-baseline-a`
 
@@ -84,7 +74,7 @@ Việc nghiên cứu là **adjudication / triage**, không phải detection.
 | **drop** | Không khớp nhãn người — bỏ. |
 | **unknown** | Thiếu dòng hoặc khớp nhiều nhãn — không học, không tính F1. |
 
-Không claim “không sót mọi lỗ”. Durieux et al. (ICSE 2020): 9 tool gộp khoảng 42% lỗ đã gắn nhãn trên SmartBugs Curated. Nhóm đảm bảo **không sót quyết định** trên mọi alert trong thang và mọi hạng DASP đã tuyên bố. Lỗ không có alert máy → ô **ABSENT** (sót có sổ), không bịa thêm finding.
+Bài không khẳng định phủ hết mọi lỗ trên Curated. Durieux et al. (ICSE 2020) cho thấy chín công cụ tĩnh gộp lại chỉ bắt khoảng 42% lỗ đã gắn nhãn trên SmartBugs Curated. Yêu cầu đặt ra là **không sót quyết định** trên mọi alert thuộc thang và mọi hạng DASP đã tuyên bố. Lỗ không có alert máy được ghi ở ô **ABSENT** (sót có sổ), không bổ sung finding.
 
 Khác các bài đã có: LLM-SmartAudit chia vai *chức danh* và tìm lỗ từ mã; GPTLens nhân bản cùng một prompt; GPTScan xác nhận lỗ logic; iAudit fine-tune trên *hàm*. Đơn vị ở đây là **alert**; vai = **họ lỗ**; việc học = **keep/drop**.
 
@@ -161,7 +151,7 @@ Quy trình đã làm xong tới hết nhãn:
 6. Dựng ma trận coverage từ nhãn.
 7. Thêm SolidiFI (bug bơm, chỉ họ R/A/C) làm **tập học phụ** → `labels_solidifi.jsonl` + `data/sft/combined`. F1 chính vẫn Curated.
 
-**Đã xong:** học R/A/C/J; pred A/B/C/D/E/E_noR đủ 343/112; F1 hold-out ở mục *Cho nhóm*; bài báo `docs/SlaTriage_Bao_Khoa_Hoc.md`. G không vào bảng F1.
+Bốn adapter đã huấn luyện xong. Các file `pred_A` đến `pred_E` và `pred_E_noR` đủ 343 cảnh báo / 112 file. Bản thảo bài báo nằm tại `docs/SlaTriage_Bao_Khoa_Hoc.md`.
 
 ---
 
@@ -181,9 +171,9 @@ Tập học phụ SolidiFI (200 file RAC, bug bơm, **không** vào F1 chính): 
 
 ---
 
-## 5. Tái lập (nếu cần chạy lại)
+## 5. Tái lập thực nghiệm
 
-Train / eval / CPU report: xem mục *Cho nhóm* ở đầu README. Câu bảo vệ ngắn: *Ba họ vì protocol trên Slither×Curated chỉ R/A/C đủ. Keep/drop là phán trên alert. Sót kê ở ô ABSENT, không bịa lỗ.*
+Các lệnh huấn luyện, suy luận và dựng báo cáo được nêu ở mục *Tài nguyên và kết quả thực nghiệm*. Lỗ không có cảnh báo máy được ghi nhận ở ô ABSENT, không được bổ sung finding.
 
 ---
 
