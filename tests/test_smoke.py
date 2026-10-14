@@ -47,6 +47,21 @@ def test_single_shot_chunks_many_alerts():
     assert {p["alert_id"] for p in out} == {a.alert_id for a in alerts}
 
 
+def test_expert_accepts_list_json():
+    from slatriage.agents import ExpertAgent
+    from slatriage.llm import LLMBackend
+    from slatriage.schema import Alert
+
+    class ListExpert(LLMBackend):
+        def generate(self, system, user, **kwargs):
+            return '[{"alert_id":"a1","decision":"keep","line":1,"reason":"ok"}]'
+
+    alert = Alert(alert_id="a1", detector="reentrancy-eth", family="R", lines=[1], source="x.sol")
+    out = ExpertAgent("R", ListExpert(), prompt_only=True).decide(alert)
+    assert out.decision == "keep"
+    assert out.alert_id == "a1"
+
+
 def test_judge_accepts_list_json():
     from slatriage.agents import JudgeAgent
     from slatriage.llm import LLMBackend

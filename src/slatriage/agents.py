@@ -15,6 +15,20 @@ from .prompts import (
 from .schema import Alert, ExpertDecision, Family, JudgeFinding, JudgeOutput
 
 
+def _as_decision_dict(data: Any, alert_id: str | None = None) -> dict[str, Any]:
+    """Model sometimes returns a JSON list instead of one object."""
+    if isinstance(data, list):
+        if alert_id:
+            for item in data:
+                if isinstance(item, dict) and str(item.get("alert_id") or "") == alert_id:
+                    return item
+        for item in data:
+            if isinstance(item, dict):
+                return item
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 class ExpertAgent:
     def __init__(self, family: Family, llm: LLMBackend, *, prompt_only: bool = False):
         self.family = family
@@ -40,6 +54,7 @@ class ExpertAgent:
                 detector=alert.detector,
                 raw=raw,
             )
+        data = _as_decision_dict(data, alert.alert_id)
         decision = data.get("decision", "drop")
         if decision not in ("keep", "drop"):
             decision = "drop"
