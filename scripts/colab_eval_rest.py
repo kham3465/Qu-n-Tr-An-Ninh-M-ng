@@ -12,6 +12,7 @@ Env:
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -72,6 +73,30 @@ def main() -> None:
     print(f"pred_dir={pred_dir}")
     print(f"configs={configs}  (full labels_v1 = 343 alerts / 112 files, same as pred_E)")
     print("resume=on  force=off  holdout-only=off  train=off")
+    for cfg in [c.strip() for c in configs.replace("remaining", "B,C,D,E_noR,G").split(",") if c.strip()]:
+        p = pred_dir / f"pred_{cfg}.jsonl"
+        if not p.exists():
+            print(f"PREFLIGHT {p.name}: missing (will start 0/112)")
+            continue
+        n = 0
+        srcs: set[str] = set()
+        with p.open(encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                n += 1
+                try:
+                    row = json.loads(line)
+                    if row.get("source"):
+                        srcs.add(str(row["source"]))
+                except json.JSONDecodeError:
+                    pass
+        print(f"PREFLIGHT {p.name}: n={n} sources={len(srcs)} → resume SKIP {len(srcs)} files")
+        if cfg == "G" and n < 50:
+            raise SystemExit(
+                f"pred_G.jsonl only {n} lines — sai folder, dừng để không ghi đè. "
+                "Chọn đúng slatriage_reports trên Drive cũ."
+            )
 
     cmd = [
         sys.executable,

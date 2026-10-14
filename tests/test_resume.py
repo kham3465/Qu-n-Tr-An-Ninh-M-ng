@@ -144,10 +144,49 @@ def test_council_resume_skips_done_source(tmp_path):
     text = r.stdout + r.stderr
     assert r.returncode == 0, text
     assert f"SKIP {rows[0]['source']}" in text
+    assert "RESUME" in text
     got = read_jsonl(out)
     srcs = [p.get("source") for p in got]
     assert srcs.count(rows[0]["source"]) == 1
     assert len(got) == len(rows)
+
+
+def test_council_existing_file_resumes_without_flag(tmp_path):
+    import subprocess
+    import sys
+
+    from slatriage.io_utils import read_jsonl, write_jsonl
+
+    gold = ROOT / "data" / "labels" / "demo_labels.jsonl"
+    out = tmp_path / "pred_G.jsonl"
+    rows = read_jsonl(gold)
+    write_jsonl(
+        out,
+        [{"alert_id": rows[0]["alert_id"], "decision": "keep", "source": rows[0]["source"]}],
+    )
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "run_council.py"),
+            "--alerts",
+            str(gold),
+            "--config",
+            "G",
+            "--backend",
+            "mock",
+            "--out",
+            str(out),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    text = r.stdout + r.stderr
+    assert r.returncode == 0, text
+    assert f"SKIP {rows[0]['source']}" in text
+    got = read_jsonl(out)
+    assert len(got) == len(rows)
+    assert sum(1 for p in got if p.get("source") == rows[0]["source"]) == 1
 
 
 def test_after_train_pred_complete(tmp_path):

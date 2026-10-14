@@ -94,8 +94,10 @@ def main() -> None:
     ap.add_argument(
         "--resume",
         action="store_true",
-        help="skip sources already in --out and flush after each file (Colab/Kaggle safe)",
+        default=True,
+        help="skip sources already in --out (default on). --force to start over.",
     )
+    ap.add_argument("--force", action="store_true", help="wipe --out and rerun every source")
     args = ap.parse_args()
 
     alerts = load_alerts(args.alerts)
@@ -154,10 +156,19 @@ def main() -> None:
     invent_total = 0
     per_source: list[dict] = []
     done: set[str] = set()
-    if args.resume:
+    # Existing pred file always resumes unless --force. Never overwrite a partial G/B run.
+    use_resume = (args.out.exists() or args.resume) and not args.force
+    if use_resume:
         preds, done, per_source, invent_total = load_resume(args.out)
         if done:
-            print(f"RESUME {len(preds)} preds from {len(done)} sources in {args.out.name}", flush=True)
+            print(
+                f"RESUME {len(preds)} preds from {len(done)} sources in {args.out} — will SKIP those files",
+                flush=True,
+            )
+        elif args.out.exists():
+            print(f"WARN {args.out} exists but no source field; continuing without skip", flush=True)
+    elif args.force and args.out.exists():
+        print(f"FORCE wipe {args.out.name}", flush=True)
 
     src_items = list(by_src.items())
     n_total = len(src_items)
