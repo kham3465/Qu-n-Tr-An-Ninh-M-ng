@@ -71,6 +71,7 @@ class ExpertAgent:
 
 INFER_ALERT_CHUNK = 1
 INFER_JUDGE_CHUNK = 6
+INFER_G_MAX_NEW = 768
 
 
 class JudgeAgent:
@@ -171,7 +172,9 @@ def _parse_single_shot(raw: str, alerts: list[Alert]) -> list[dict[str, Any]]:
     return out
 
 
-def single_shot_triage(llm: LLMBackend, alerts: list[Alert]) -> list[dict[str, Any]]:
+def single_shot_triage(
+    llm: LLMBackend, alerts: list[Alert], *, max_new_tokens: int = 256
+) -> list[dict[str, Any]]:
     if not alerts:
         return []
     if len(alerts) <= INFER_ALERT_CHUNK:
@@ -179,10 +182,10 @@ def single_shot_triage(llm: LLMBackend, alerts: list[Alert]) -> list[dict[str, A
             single_prompt_system(),
             single_prompt_user(alerts),
             temperature=0.0,
-            max_new_tokens=256,
+            max_new_tokens=max_new_tokens,
         )
         return _parse_single_shot(raw, alerts)
     out: list[dict[str, Any]] = []
     for i in range(0, len(alerts), INFER_ALERT_CHUNK):
-        out.extend(single_shot_triage(llm, alerts[i : i + INFER_ALERT_CHUNK]))
+        out.extend(single_shot_triage(llm, alerts[i : i + INFER_ALERT_CHUNK], max_new_tokens=max_new_tokens))
     return out

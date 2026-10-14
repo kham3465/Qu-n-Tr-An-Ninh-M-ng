@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .agents import ExpertAgent, JudgeAgent, single_shot_triage
+from .agents import INFER_G_MAX_NEW, ExpertAgent, JudgeAgent, single_shot_triage
 from .families import assign_family
 from .llm import LLMBackend, MockLLM
 from .pipeline import invent_count
@@ -50,7 +50,7 @@ def config_B_or_G(
     sol_path: str = "",
 ) -> ContractReport:
     scoped = [a for a in alerts if a.family]
-    preds = single_shot_triage(llm, scoped)
+    preds = single_shot_triage(llm, scoped, max_new_tokens=INFER_G_MAX_NEW if config == "G" else 256)
     for p in preds:
         # attach family if known
         for a in scoped:

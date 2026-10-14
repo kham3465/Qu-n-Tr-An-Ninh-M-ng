@@ -10,7 +10,10 @@ from typing import Any
 
 def extract_json_object(text: str) -> Any:
     """Parse first JSON object or array from model text."""
-    text = text.strip()
+    text = (text or "").strip()
+    if "</think>" in text:
+        text = text.split("</think>")[-1].strip()
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S | re.I).strip()
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)

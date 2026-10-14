@@ -24,6 +24,7 @@ def test_hf_backends_share_one_pool():
 def test_extract_json():
     assert extract_json_object('{"a":1}')["a"] == 1
     assert extract_json_object("```json\n{\"a\": 2}\n```")["a"] == 2
+    assert extract_json_object('<think>reason</think>\n{"a":3}')["a"] == 3
 
 
 def test_config_a_keeps_all_scoped():
